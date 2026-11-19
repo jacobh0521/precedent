@@ -17,6 +17,13 @@
 
 ---
 
+## 🌐 Live Cloud Run Deployment
+
+The game is live on Google Cloud Run:
+👉 **[https://precedent-224653452177.us-central1.run.app](https://precedent-224653452177.us-central1.run.app)**
+
+---
+
 ## 🛠 Tech Stack
 
 - **Backend:** Go 1.24+ (`net/http` + `github.com/go-chi/chi/v5`)
