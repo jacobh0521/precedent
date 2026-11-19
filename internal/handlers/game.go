@@ -18,34 +18,14 @@ type GameHandler struct {
 	templates *template.Template
 }
 
-// Word suggestions for datalists and quick-pick chips
-var (
-	AdjectiveSuggestions = []string{
-		"Inflatable", "Dehydrated", "Folded", "Metaphorical", "Frozen",
-		"Microscopic", "Taxidermied", "Robotic", "Ceremonial", "Rental",
-		"Origami", "Plastic", "Wooden", "Ghostly", "Digital",
-		"Holographic", "Miniature", "Stuffed", "Decoy", "Paper",
-	}
-
-	ContainerSuggestions = []string{
-		"Envelope", "Pocket", "Matchbox", "Thermos", "Velvet Pouch",
-		"Cardboard Box", "Glass Jar", "Lead Crate", "Mesh Bag", "Sock",
-		"Coin Purse", "Thimble", "Ziploc Bag", "Tin Can", "Briefcase",
-		"Backpack", "Shoebox", "Pillowcase", "Lunchbox", "Ammo Can",
-	}
-)
-
 // DeskViewData holds data for the main play view.
 type DeskViewData struct {
-	CurrentDay           int
-	AttemptCount         int
-	MaxAttempts          int
-	Manifests            []db.Manifest
-	SelectedManifest     *db.Manifest
-	ActiveLaws           []rules.Law
-	AdjectiveSuggestions []string
-	ContainerSuggestions []string
-	WeeklyDebrief        db.WeeklyDebrief
+	CurrentDay    int
+	AttemptCount  int
+	MaxAttempts   int
+	TodayManifest db.Manifest
+	ActiveLaws    []rules.Law
+	WeeklyDebrief db.WeeklyDebrief
 }
 
 // VerdictPartialData holds data passed to verdict.html.
@@ -92,75 +72,31 @@ func NewGameHandler(store *db.Store, templateDir string) (*GameHandler, error) {
 func (h *GameHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/", h.HandleDeskView)
 	r.Post("/declare", h.HandleSubmitDisguise)
-	r.Get("/select-manifest", h.HandleSelectManifest)
 	r.Get("/weekly-debrief", h.HandleWeeklyDebrief)
 	r.Post("/retry", h.HandleRetryAttempts)
 	r.Post("/dev/next-day", h.HandleSimulateNextDay)
 	r.Post("/dev/reset", h.HandleResetDay1)
 }
 
-// HandleDeskView renders the streamlined customs checkpoint.
+// HandleDeskView renders today's single contraband checkpoint.
 func (h *GameHandler) HandleDeskView(w http.ResponseWriter, r *http.Request) {
 	currentDay, _ := h.store.GetCurrentDay()
 	attemptCount, _ := h.store.GetAttemptCount()
-	allManifests, _ := h.store.GetAllManifests()
-
-	dayManifests := make([]db.Manifest, 0)
-	for _, m := range allManifests {
-		if m.Day <= currentDay {
-			dayManifests = append(dayManifests, m)
-		}
-	}
-	if len(dayManifests) == 0 {
-		dayManifests = allManifests
-	}
-
-	selectedID := r.URL.Query().Get("manifest_id")
-	if selectedID == "" {
-		selectedID, _ = h.store.GetSelectedManifestID()
-	}
-	if selectedID == "" && len(dayManifests) > 0 {
-		selectedID = dayManifests[0].ID
-	}
-
-	selectedManifest, _ := h.store.GetManifestByID(selectedID)
-	if selectedManifest == nil && len(dayManifests) > 0 {
-		selectedManifest = &dayManifests[0]
-	}
-
+	todayManifest, _ := h.store.GetTodayManifest()
 	activeLaws, _ := h.store.GetActiveLaws()
 	weeklyDebrief, _ := h.store.GetWeeklyDebrief()
 
 	data := DeskViewData{
-		CurrentDay:           currentDay,
-		AttemptCount:         attemptCount,
-		MaxAttempts:          3, // 3 attempts per day
-		Manifests:            dayManifests,
-		SelectedManifest:     selectedManifest,
-		ActiveLaws:           activeLaws,
-		AdjectiveSuggestions: AdjectiveSuggestions,
-		ContainerSuggestions: ContainerSuggestions,
-		WeeklyDebrief:        weeklyDebrief,
+		CurrentDay:    currentDay,
+		AttemptCount:  attemptCount,
+		MaxAttempts:   3, // 3 attempts per day
+		TodayManifest: todayManifest,
+		ActiveLaws:    activeLaws,
+		WeeklyDebrief: weeklyDebrief,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_ = h.templates.ExecuteTemplate(w, "layout.html", data)
-}
-
-// HandleSelectManifest switches the active parcel inspected on desk.
-func (h *GameHandler) HandleSelectManifest(w http.ResponseWriter, r *http.Request) {
-	manifestID := r.URL.Query().Get("manifest_id")
-	if manifestID != "" {
-		_ = h.store.SetSelectedManifestID(manifestID)
-	}
-
-	if r.Header.Get("HX-Request") == "true" {
-		w.Header().Set("HX-Redirect", "/?manifest_id="+manifestID)
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	http.Redirect(w, r, "/?manifest_id="+manifestID, http.StatusSeeOther)
 }
 
 // HandleSubmitDisguise evaluates user-entered disguise against active laws.
@@ -170,7 +106,6 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	manifestID := r.FormValue("manifest_id")
 	adjective := strings.TrimSpace(r.FormValue("adjective"))
 	container := strings.TrimSpace(r.FormValue("container"))
 
@@ -181,14 +116,9 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 		container = "Bare Hands"
 	}
 
-	manifest, err := h.store.GetManifestByID(manifestID)
-	if err != nil {
-		http.Error(w, "Manifest parcel not found", http.StatusNotFound)
-		return
-	}
-
 	currentDay, _ := h.store.GetCurrentDay()
 	attemptCount, _ := h.store.GetAttemptCount()
+	manifest, _ := h.store.GetTodayManifest()
 	activeLaws, _ := h.store.GetActiveLaws()
 
 	disguise := rules.Disguise{
@@ -199,12 +129,11 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	cargo := manifest.ToCargo()
 	verdict := rules.Evaluate(activeLaws, cargo, disguise, attemptCount)
 
-	// If Cleared: Compile punchline law
+	// If Cleared: Compile TWO new rules (Rule A: Banned Adjective, Rule B: Banned Container)
 	if verdict.Passed {
-		newLaw := rules.CompilePunchlineLaw(currentDay+1, cargo, disguise, len(activeLaws))
-		_, err := h.store.SaveLaw(newLaw)
-		if err == nil {
-			verdict.Punchline = &newLaw
+		newLaws := rules.CompileLoopholeRules(currentDay+1, disguise, len(activeLaws))
+		if err := h.store.SaveLaws(newLaws); err == nil {
+			verdict.CompiledLaws = newLaws
 		}
 	} else {
 		// Increment attempts (up to 3)
@@ -213,18 +142,18 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	_ = h.store.SaveDeclaration(manifestID, currentDay, disguise, attemptCount, verdict)
+	_ = h.store.SaveDeclaration(manifest.ID, manifest.Name, currentDay, disguise, attemptCount, verdict)
 	updatedLaws, _ := h.store.GetActiveLaws()
 
 	outOfTries := (!verdict.Passed && attemptCount >= 3)
 
 	// Fetch all attempts today for this manifest to construct the Wordle-like share text
-	records, _ := h.store.GetDeclarationsForDay(manifestID, currentDay)
-	shareText := formatDailyShare(currentDay, manifest.Name, verdict.Passed, attemptCount, records, verdict.Punchline)
+	records, _ := h.store.GetDeclarationsForDay(currentDay)
+	shareText := formatDailyShare(currentDay, manifest.Name, verdict.Passed, attemptCount, records, verdict.CompiledLaws)
 
 	partialData := VerdictPartialData{
 		Verdict:        verdict,
-		Manifest:       *manifest,
+		Manifest:       manifest,
 		Disguise:       disguise,
 		ActiveLaws:     updatedLaws,
 		CurrentDay:     currentDay,
@@ -241,7 +170,7 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func formatDailyShare(day int, cargoName string, cleared bool, attempts int, records []db.DeclarationRecord, punchline *rules.Law) string {
+func formatDailyShare(day int, cargoName string, cleared bool, attempts int, records []db.DeclarationRecord, compiledLaws []rules.Law) string {
 	score := fmt.Sprintf("%d/3", attempts)
 	if !cleared && attempts >= 3 {
 		score = "X/3"
@@ -255,8 +184,12 @@ func formatDailyShare(day int, cargoName string, cleared bool, attempts int, rec
 		sb.WriteString(fmt.Sprintf("%s (%s + %s)\n", rec.EmojiRow, rec.Adjective, rec.Container))
 	}
 
-	if punchline != nil {
-		sb.WriteString(fmt.Sprintf("\n⚖️ New Precedent: %s\n", punchline.Signpost))
+	if len(compiledLaws) > 0 {
+		signposts := make([]string, 0, len(compiledLaws))
+		for _, l := range compiledLaws {
+			signposts = append(signposts, l.Signpost)
+		}
+		sb.WriteString(fmt.Sprintf("\n⚖️ New Laws: %s\n", strings.Join(signposts, " | ")))
 	}
 	sb.WriteString("\nSmuggle your cargo: https://github.com/jacobh0521/precedent")
 	return sb.String()
@@ -269,7 +202,7 @@ func (h *GameHandler) HandleWeeklyDebrief(w http.ResponseWriter, r *http.Request
 	_ = h.templates.ExecuteTemplate(w, "weekly_debrief.html", debrief)
 }
 
-// HandleRetryAttempts resets attempt count to 1 for the current parcel.
+// HandleRetryAttempts resets attempt count to 1 for the current day.
 func (h *GameHandler) HandleRetryAttempts(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.ResetAttempt()
 	if r.Header.Get("HX-Request") == "true" {

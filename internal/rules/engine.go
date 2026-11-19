@@ -26,7 +26,7 @@ func (c Cargo) HasTrait(t string) bool {
 
 // Disguise is the player's 2-part disguise (Adjective + Container).
 type Disguise struct {
-	Adjective string `json:"adjective"` // e.g. "Inflatable", "Dehydrated", "Taxidermied"
+	Adjective string `json:"adjective"` // e.g. "Inflatable", "Dehydrated", "Metaphorical"
 	Container string `json:"container"` // e.g. "Envelope", "Pocket", "Matchbox"
 }
 
@@ -34,10 +34,10 @@ type Disguise struct {
 type Law struct {
 	ID          int64     `json:"id"`
 	Day         int       `json:"day"`
-	Signpost    string    `json:"signpost"` // Blunt 3-4 word signpost (e.g. "NO LIVING THINGS")
+	Signpost    string    `json:"signpost"` // Blunt signpost (e.g. "NOTHING METAPHORICAL", "NOTHING IN AN ENVELOPE")
 	RuleType    string    `json:"rule_type"`
 	TargetAdj   string    `json:"target_adj,omitempty"`
-	TargetCargo string    `json:"target_cargo,omitempty"`
+	TargetCargo string    `json:"target_cargo,omitempty"` // used for target container
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -51,13 +51,13 @@ type RuleAudit struct {
 
 // AuditVerdict is the overall result of a stamp attempt.
 type AuditVerdict struct {
-	Passed      bool        `json:"passed"`
-	Status      string      `json:"status"` // "CLEARED" or "CONFISCATED"
-	Audits      []RuleAudit `json:"audits"`
-	Attempt     int         `json:"attempt"`
-	MaxAttempts int         `json:"max_attempts"` // 3 attempts per day
-	EmojiRow    string      `json:"emoji_row"`    // e.g. "🟩🟩🟩🟩🟩" or "🟥🟩🟩🟩🟩"
-	Punchline   *Law        `json:"punchline,omitempty"`
+	Passed       bool        `json:"passed"`
+	Status       string      `json:"status"` // "CLEARED" or "CONFISCATED"
+	Audits       []RuleAudit `json:"audits"`
+	Attempt      int         `json:"attempt"`
+	MaxAttempts  int         `json:"max_attempts"` // 3 attempts per day
+	EmojiRow     string      `json:"emoji_row"`    // e.g. "🟩🟩🟩🟩🟩"
+	CompiledLaws []Law       `json:"compiled_laws,omitempty"` // 2 new laws generated on win
 }
 
 // StarterLaws returns the 5 blunt 4-word signpost starter rules.
@@ -96,7 +96,7 @@ func StarterLaws() []Law {
 	}
 }
 
-// Broad dictionaries of semantic keywords for open text user entry
+// Dictionaries of semantic keywords for open text user entry
 var (
 	NonLivingAdjectives = []string{
 		"inflatable", "metaphorical", "robotic", "mechanical", "taxidermied",
@@ -160,7 +160,6 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 	switch law.RuleType {
 	case "no_living":
 		if cargo.HasTrait("living") {
-			// Slipped past if declared as non-living (e.g. Inflatable, Taxidermied, Robotic, Metaphorical)
 			if matchAnyKeyword(adj, NonLivingAdjectives) {
 				return true
 			}
@@ -175,7 +174,6 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		return true
 
 	case "pocket_only":
-		// Must fit in a pocket: either container fits in pocket OR adjective compresses it
 		if matchAnyKeyword(cnt, PocketContainers) || matchAnyKeyword(adj, CompressingAdjectives) {
 			return true // Slipped past!
 		}
@@ -183,7 +181,6 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 
 	case "no_wet":
 		if cargo.HasTrait("wet") {
-			// Slipped past if dehydrated, frozen, dry adjective, or sealed container (like thermos)
 			if matchAnyKeyword(adj, DryAdjectives) || strings.Contains(cnt, "thermos") || strings.Contains(cnt, "vacuum") {
 				return true
 			}
@@ -197,26 +194,25 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		}
 		return true
 
-	case "custom_punchline":
-		targetAdj := strings.ToLower(strings.TrimSpace(law.TargetAdj))
-		if strings.Contains(adj, targetAdj) && cargoMatches(cargo.Name, law.TargetCargo) {
-			return false // Busted by yesterday's precedent!
+	case "banned_adjective":
+		// Evaluates "NOTHING [ADJECTIVE]"
+		target := strings.ToLower(strings.TrimSpace(law.TargetAdj))
+		if target != "" && (strings.Contains(adj, target) || strings.Contains(target, adj)) {
+			return false // Busted! Used yesterday's loophole adjective
+		}
+		return true
+
+	case "banned_container":
+		// Evaluates "NOTHING IN [CONTAINER]"
+		target := strings.ToLower(strings.TrimSpace(law.TargetCargo))
+		if target != "" && (strings.Contains(cnt, target) || strings.Contains(target, cnt)) {
+			return false // Busted! Used yesterday's loophole container
 		}
 		return true
 
 	default:
 		return true
 	}
-}
-
-func cargoMatches(name, target string) bool {
-	n := strings.ToLower(strings.TrimSpace(name))
-	t := strings.ToLower(strings.TrimSpace(target))
-	tSingular := strings.TrimSuffix(t, "s")
-	nSingular := strings.TrimSuffix(n, "s")
-
-	return strings.Contains(n, t) || strings.Contains(t, n) ||
-		strings.Contains(n, tSingular) || strings.Contains(nSingular, tSingular)
 }
 
 // Evaluate evaluates all active laws against cargo and disguise (Max 3 attempts).
@@ -258,49 +254,47 @@ func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 	}
 }
 
-// CompilePunchlineLaw creates a 3-4 word punchline ban from the winning loophole.
-func CompilePunchlineLaw(nextDay int, cargo Cargo, d Disguise, lawCount int) Law {
-	noun := simplifyCargoName(cargo.Name)
-	adj := strings.ToUpper(strings.TrimSpace(d.Adjective))
+// CompileLoopholeRules creates TWO brand-new rules from the winning disguise:
+// Rule 1: NOTHING [ADJECTIVE] (e.g. NOTHING METAPHORICAL)
+// Rule 2: NOTHING IN [CONTAINER] (e.g. NOTHING IN AN ENVELOPE)
+func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
+	adj := strings.TrimSpace(d.Adjective)
+	cnt := strings.TrimSpace(d.Container)
 
-	signpost := fmt.Sprintf("NO %s %s", adj, noun)
+	adjSignpost := fmt.Sprintf("NOTHING %s", strings.ToUpper(adj))
+	cntSignpost := formatContainerSignpost(cnt)
 
-	return Law{
-		ID:          int64(lawCount + 1),
+	law1 := Law{
+		ID:        int64(existingCount + 1),
+		Day:       nextDay,
+		Signpost:  adjSignpost,
+		RuleType:  "banned_adjective",
+		TargetAdj: strings.ToLower(adj),
+		CreatedAt: time.Now(),
+	}
+
+	law2 := Law{
+		ID:          int64(existingCount + 2),
 		Day:         nextDay,
-		Signpost:    signpost,
-		RuleType:    "custom_punchline",
-		TargetAdj:   d.Adjective,
-		TargetCargo: noun,
+		Signpost:    cntSignpost,
+		RuleType:    "banned_container",
+		TargetCargo: strings.ToLower(cnt),
 		CreatedAt:   time.Now(),
 	}
+
+	return []Law{law1, law2}
 }
 
-func simplifyCargoName(name string) string {
-	lower := strings.ToLower(name)
-	if strings.Contains(lower, "giraffe") {
-		return "GIRAFFES"
-	}
-	if strings.Contains(lower, "weather") {
-		return "WEATHER"
-	}
-	if strings.Contains(lower, "regret") {
-		return "REGRETS"
-	}
-	if strings.Contains(lower, "cat") {
-		return "CATS"
-	}
-	if strings.Contains(lower, "debt") {
-		return "DEBT"
+func formatContainerSignpost(cnt string) string {
+	upper := strings.ToUpper(strings.TrimSpace(cnt))
+	if len(upper) == 0 {
+		return "NO CONTAINERS"
 	}
 
-	words := strings.Fields(strings.ToUpper(name))
-	if len(words) > 0 {
-		last := words[len(words)-1]
-		if !strings.HasSuffix(last, "S") {
-			last += "S"
-		}
-		return last
+	firstLetter := string(upper[0])
+	article := "A"
+	if strings.Contains("AEIOU", firstLetter) {
+		article = "AN"
 	}
-	return "ITEMS"
+	return fmt.Sprintf("NOTHING IN %s %s", article, upper)
 }

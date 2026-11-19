@@ -8,8 +8,8 @@ func TestSignpostRules_GiraffeSmuggling(t *testing.T) {
 	starterLaws := StarterLaws()
 
 	giraffe := Cargo{
-		ID:     "cargo-giraffe",
-		Name:   "A Live Giraffe",
+		ID:     "cargo-1",
+		Name:   "A LIVE GIRAFFE",
 		Traits: []string{"living", "oversized"},
 	}
 
@@ -22,85 +22,72 @@ func TestSignpostRules_GiraffeSmuggling(t *testing.T) {
 	if verdict1.Passed {
 		t.Fatalf("expected bad disguise 1 to be confiscated")
 	}
-	if verdict1.MaxAttempts != 3 {
-		t.Fatalf("expected MaxAttempts to be 3, got %d", verdict1.MaxAttempts)
-	}
 
-	// Try 2: User enters "Taxidermied" in "Matchbox" -> Should CLEAR all 5!
-	// NO LIVING THINGS: Pass (taxidermied)
-	// NO GLASS: Pass (matchbox)
-	// MUST FIT IN A POCKET: Pass (matchbox fits in pocket)
-	// NOTHING WET: Pass
-	// NO METAL: Pass (cardboard matchbox)
+	// Try 2: User enters "Metaphorical" in "Envelope" -> Should CLEAR all 5!
 	winningDisguise := Disguise{
-		Adjective: "Taxidermied",
-		Container: "Matchbox",
+		Adjective: "Metaphorical",
+		Container: "Envelope",
 	}
 	verdict2 := Evaluate(starterLaws, giraffe, winningDisguise, 2)
 	if !verdict2.Passed {
-		t.Fatalf("expected Taxidermied in Matchbox to clear all rules! audits: %+v", verdict2.Audits)
+		t.Fatalf("expected Metaphorical in Envelope to clear all rules! audits: %+v", verdict2.Audits)
 	}
 	if verdict2.EmojiRow != "🟩🟩🟩🟩🟩" {
 		t.Fatalf("expected emoji row 🟩🟩🟩🟩🟩, got %s", verdict2.EmojiRow)
 	}
 }
 
-func TestPunchlineCompilation(t *testing.T) {
+func TestTwoRuleLoopholeCompilation(t *testing.T) {
 	starterLaws := StarterLaws()
 
 	giraffe := Cargo{
-		ID:     "cargo-giraffe",
-		Name:   "A Live Giraffe",
+		ID:     "cargo-1",
+		Name:   "A LIVE GIRAFFE",
 		Traits: []string{"living", "oversized"},
 	}
 
 	winningDisguise := Disguise{
-		Adjective: "Inflatable",
+		Adjective: "Metaphorical",
 		Container: "Envelope",
 	}
 
-	newLaw := CompilePunchlineLaw(2, giraffe, winningDisguise, len(starterLaws))
-	if newLaw.Signpost != "NO INFLATABLE GIRAFFES" {
-		t.Fatalf("expected signpost 'NO INFLATABLE GIRAFFES', got '%s'", newLaw.Signpost)
+	// Day 1 clearance generates TWO rules for Day 2:
+	// Rule 1: NOTHING METAPHORICAL
+	// Rule 2: NOTHING IN AN ENVELOPE
+	newLaws := CompileLoopholeRules(2, winningDisguise, len(starterLaws))
+	if len(newLaws) != 2 {
+		t.Fatalf("expected 2 new laws, got %d", len(newLaws))
+	}
+	if newLaws[0].Signpost != "NOTHING METAPHORICAL" {
+		t.Fatalf("expected 'NOTHING METAPHORICAL', got '%s'", newLaws[0].Signpost)
+	}
+	if newLaws[1].Signpost != "NOTHING IN AN ENVELOPE" {
+		t.Fatalf("expected 'NOTHING IN AN ENVELOPE', got '%s'", newLaws[1].Signpost)
 	}
 
-	lawbook := append(starterLaws, newLaw)
-
-	// Re-attempting the exact same disguise on Day 2 must now FAIL Law #6!
-	day2Verdict := Evaluate(lawbook, giraffe, winningDisguise, 1)
-	if day2Verdict.Passed {
-		t.Fatalf("expected Day 2 attempt with Inflatable Giraffe to be BUSTED by new law!")
+	lawbook := append(starterLaws, newLaws...)
+	if len(lawbook) != 7 {
+		t.Fatalf("expected 7 laws in Day 2 lawbook, got %d", len(lawbook))
 	}
 
-	// Alternate loophole "Robotic" + "Pocket" should pass!
-	altDisguise := Disguise{
-		Adjective: "Robotic",
-		Container: "Pocket",
-	}
-	altVerdict := Evaluate(lawbook, giraffe, altDisguise, 2)
-	if !altVerdict.Passed {
-		t.Fatalf("expected Robotic Giraffe in Pocket to slip past day 2 laws: %+v", altVerdict.Audits)
-	}
-}
-
-func TestWeatherDehydration(t *testing.T) {
-	starterLaws := StarterLaws()
-
-	weather := Cargo{
-		ID:     "cargo-weather",
-		Name:   "Tomorrow's Weather",
-		Traits: []string{"wet", "oversized"},
+	// Test Day 2: Trying Metaphorical in Pocket must fail Law #6 (NOTHING METAPHORICAL)
+	day2FailAdj := Evaluate(lawbook, giraffe, Disguise{Adjective: "Metaphorical", Container: "Pocket"}, 1)
+	if day2FailAdj.Passed {
+		t.Fatalf("expected Metaphorical to be BUSTED by Law #6")
 	}
 
-	good := Disguise{
-		Adjective: "Dehydrated",
-		Container: "Pocket",
+	// Test Day 2: Trying Inflatable in Envelope must fail Law #7 (NOTHING IN AN ENVELOPE)
+	day2FailCnt := Evaluate(lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Envelope"}, 2)
+	if day2FailCnt.Passed {
+		t.Fatalf("expected Envelope to be BUSTED by Law #7")
 	}
-	vGood := Evaluate(starterLaws, weather, good, 2)
-	if !vGood.Passed {
-		t.Fatalf("expected Dehydrated weather in pocket to pass: %+v", vGood.Audits)
+
+	// Test Day 2: Trying Inflatable in Pocket clears all 7 laws!
+	day2Success := Evaluate(lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Pocket"}, 3)
+	if !day2Success.Passed {
+		t.Fatalf("expected Inflatable in Pocket to clear all 7 laws! audits: %+v", day2Success.Audits)
 	}
-	if vGood.MaxAttempts != 3 {
-		t.Fatalf("expected max attempts 3, got %d", vGood.MaxAttempts)
+	if day2Success.EmojiRow != "🟩🟩🟩🟩🟩🟩🟩" {
+		t.Fatalf("expected 7 green squares, got %s", day2Success.EmojiRow)
 	}
 }

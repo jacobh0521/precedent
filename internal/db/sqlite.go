@@ -50,8 +50,8 @@ type DaySummary struct {
 	ManifestName string   `json:"manifest_name"`
 	Cleared      bool     `json:"cleared"`
 	AttemptsUsed int      `json:"attempts_used"`
-	WinningPath  string   `json:"winning_path"` // e.g. "Inflatable in Envelope"
-	Attempts     []string `json:"attempts"`     // List of "🟩🟩🟩🟩🟩 (Inflatable + Envelope)"
+	WinningPath  string   `json:"winning_path"` // e.g. "Metaphorical in Envelope"
+	Attempts     []string `json:"attempts"`     // List of "🟩🟩🟩🟩🟩 (Metaphorical + Envelope)"
 }
 
 // WeeklyDebrief holds aggregate weekly player performance.
@@ -102,17 +102,7 @@ func (s *Store) migrate() error {
 	CREATE TABLE IF NOT EXISTS game_state (
 		id INTEGER PRIMARY KEY CHECK (id = 1),
 		current_day INTEGER NOT NULL DEFAULT 1,
-		selected_manifest_id TEXT NOT NULL DEFAULT 'cargo-giraffe',
 		attempt_count INTEGER NOT NULL DEFAULT 1
-	);
-
-	CREATE TABLE IF NOT EXISTS manifests (
-		id TEXT PRIMARY KEY,
-		day INTEGER NOT NULL,
-		name TEXT NOT NULL,
-		traits TEXT NOT NULL,
-		description TEXT NOT NULL,
-		flavor_text TEXT NOT NULL
 	);
 
 	CREATE TABLE IF NOT EXISTS laws (
@@ -129,6 +119,7 @@ func (s *Store) migrate() error {
 	CREATE TABLE IF NOT EXISTS declarations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		manifest_id TEXT NOT NULL,
+		manifest_name TEXT NOT NULL,
 		day INTEGER NOT NULL,
 		adjective TEXT NOT NULL,
 		container TEXT NOT NULL,
@@ -150,54 +141,9 @@ func (s *Store) seedDay1() error {
 		return err
 	}
 	if count == 0 {
-		_, err = s.db.Exec(`INSERT INTO game_state (id, current_day, selected_manifest_id, attempt_count) VALUES (1, 1, 'cargo-giraffe', 1)`)
+		_, err = s.db.Exec(`INSERT INTO game_state (id, current_day, attempt_count) VALUES (1, 1, 1)`)
 		if err != nil {
 			return err
-		}
-	}
-
-	var mCount int
-	err = s.db.QueryRow(`SELECT COUNT(*) FROM manifests`).Scan(&mCount)
-	if err != nil {
-		return err
-	}
-	if mCount == 0 {
-		starterManifests := []Manifest{
-			{
-				ID:          "cargo-giraffe",
-				Day:         1,
-				Name:        "A LIVE GIRAFFE",
-				Traits:      []string{"living", "oversized"},
-				Description: "A 5.5-meter tall long-necked ungulate.",
-				FlavorText:  "Staring at customs agents with complete nonchalance.",
-			},
-			{
-				ID:          "cargo-weather",
-				Day:         1,
-				Name:        "TOMORROW'S WEATHER",
-				Traits:      []string{"wet", "oversized"},
-				Description: "A high-pressure storm pocket with 90% rain probability.",
-				FlavorText:  "Dripping through standard baggage carousels.",
-			},
-			{
-				ID:          "cargo-regrets",
-				Day:         1,
-				Name:        "THREE REGRETS",
-				Traits:      []string{"wet", "oversized"},
-				Description: "Heavy psychic residue soaked in cold tears.",
-				FlavorText:  "Deeply awkward to explain at the x-ray machine.",
-			},
-		}
-
-		for _, m := range starterManifests {
-			traitsJSON, _ := json.Marshal(m.Traits)
-			_, err = s.db.Exec(
-				`INSERT INTO manifests (id, day, name, traits, description, flavor_text) VALUES (?, ?, ?, ?, ?, ?)`,
-				m.ID, m.Day, m.Name, string(traitsJSON), m.Description, m.FlavorText,
-			)
-			if err != nil {
-				return err
-			}
 		}
 	}
 
@@ -230,7 +176,19 @@ func (s *Store) GetCurrentDay() (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	if day < 1 {
+		day = 1
+	}
 	return day, nil
+}
+
+// GetTodayManifest returns the single unique manifest for today.
+func (s *Store) GetTodayManifest() (Manifest, error) {
+	day, err := s.GetCurrentDay()
+	if err != nil {
+		day = 1
+	}
+	return GetManifestForDay(day), nil
 }
 
 // GetAttemptCount returns current attempt number (1-3).
@@ -260,61 +218,6 @@ func (s *Store) ResetAttempt() error {
 	return err
 }
 
-// GetSelectedManifestID returns the currently selected manifest ID.
-func (s *Store) GetSelectedManifestID() (string, error) {
-	var id string
-	err := s.db.QueryRow(`SELECT selected_manifest_id FROM game_state WHERE id = 1`).Scan(&id)
-	if err != nil {
-		return "cargo-giraffe", err
-	}
-	if id == "" {
-		return "cargo-giraffe", nil
-	}
-	return id, nil
-}
-
-// SetSelectedManifestID updates the currently selected manifest and resets attempts.
-func (s *Store) SetSelectedManifestID(manifestID string) error {
-	_, err := s.db.Exec(`UPDATE game_state SET selected_manifest_id = ?, attempt_count = 1 WHERE id = 1`, manifestID)
-	return err
-}
-
-// GetAllManifests returns all manifests.
-func (s *Store) GetAllManifests() ([]Manifest, error) {
-	rows, err := s.db.Query(`SELECT id, day, name, traits, description, flavor_text FROM manifests ORDER BY day ASC, id ASC`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var list []Manifest
-	for rows.Next() {
-		var m Manifest
-		var traitsJSON string
-		if err := rows.Scan(&m.ID, &m.Day, &m.Name, &traitsJSON, &m.Description, &m.FlavorText); err != nil {
-			return nil, err
-		}
-		_ = json.Unmarshal([]byte(traitsJSON), &m.Traits)
-		list = append(list, m)
-	}
-	return list, nil
-}
-
-// GetManifestByID retrieves a specific manifest.
-func (s *Store) GetManifestByID(id string) (*Manifest, error) {
-	var m Manifest
-	var traitsJSON string
-	err := s.db.QueryRow(
-		`SELECT id, day, name, traits, description, flavor_text FROM manifests WHERE id = ?`,
-		id,
-	).Scan(&m.ID, &m.Day, &m.Name, &traitsJSON, &m.Description, &m.FlavorText)
-	if err != nil {
-		return nil, err
-	}
-	_ = json.Unmarshal([]byte(traitsJSON), &m.Traits)
-	return &m, nil
-}
-
 // GetActiveLaws retrieves all active signpost rules.
 func (s *Store) GetActiveLaws() ([]rules.Law, error) {
 	rows, err := s.db.Query(
@@ -339,40 +242,41 @@ func (s *Store) GetActiveLaws() ([]rules.Law, error) {
 	return laws, nil
 }
 
-// SaveLaw inserts a new signpost punchline law.
-func (s *Store) SaveLaw(l rules.Law) (int64, error) {
-	res, err := s.db.Exec(
-		`INSERT INTO laws (day, signpost, rule_type, target_adj, target_cargo, is_active, created_at)
-		 VALUES (?, ?, ?, ?, ?, 1, ?)`,
-		l.Day, l.Signpost, l.RuleType, l.TargetAdj, l.TargetCargo, time.Now(),
-	)
-	if err != nil {
-		return 0, err
+// SaveLaws inserts new signpost laws.
+func (s *Store) SaveLaws(laws []rules.Law) error {
+	for _, l := range laws {
+		_, err := s.db.Exec(
+			`INSERT INTO laws (day, signpost, rule_type, target_adj, target_cargo, is_active, created_at)
+			 VALUES (?, ?, ?, ?, ?, 1, ?)`,
+			l.Day, l.Signpost, l.RuleType, l.TargetAdj, l.TargetCargo, time.Now(),
+		)
+		if err != nil {
+			return err
+		}
 	}
-	return res.LastInsertId()
+	return nil
 }
 
 // SaveDeclaration logs an attempt.
-func (s *Store) SaveDeclaration(manifestID string, day int, d rules.Disguise, attempt int, verdict rules.AuditVerdict) error {
+func (s *Store) SaveDeclaration(manifestID, manifestName string, day int, d rules.Disguise, attempt int, verdict rules.AuditVerdict) error {
 	auditJSON, _ := json.Marshal(verdict.Audits)
 
 	_, err := s.db.Exec(
-		`INSERT INTO declarations (manifest_id, day, adjective, container, attempt, status, emoji_row, audit_results, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		manifestID, day, d.Adjective, d.Container, attempt, verdict.Status, verdict.EmojiRow, string(auditJSON), time.Now(),
+		`INSERT INTO declarations (manifest_id, manifest_name, day, adjective, container, attempt, status, emoji_row, audit_results, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		manifestID, manifestName, day, d.Adjective, d.Container, attempt, verdict.Status, verdict.EmojiRow, string(auditJSON), time.Now(),
 	)
 	return err
 }
 
-// GetDeclarationsForDay retrieves declarations for a manifest on a given day.
-func (s *Store) GetDeclarationsForDay(manifestID string, day int) ([]DeclarationRecord, error) {
+// GetDeclarationsForDay retrieves declarations for a given day.
+func (s *Store) GetDeclarationsForDay(day int) ([]DeclarationRecord, error) {
 	rows, err := s.db.Query(
-		`SELECT d.id, d.manifest_id, COALESCE(m.name, d.manifest_id), d.day, d.adjective, d.container, d.attempt, d.status, d.emoji_row, d.audit_results, d.created_at
-		 FROM declarations d
-		 LEFT JOIN manifests m ON d.manifest_id = m.id
-		 WHERE d.manifest_id = ? AND d.day = ?
-		 ORDER BY d.attempt ASC, d.id ASC`,
-		manifestID, day,
+		`SELECT id, manifest_id, manifest_name, day, adjective, container, attempt, status, emoji_row, audit_results, created_at
+		 FROM declarations
+		 WHERE day = ?
+		 ORDER BY attempt ASC, id ASC`,
+		day,
 	)
 	if err != nil {
 		return nil, err
@@ -394,13 +298,12 @@ func (s *Store) GetDeclarationsForDay(manifestID string, day int) ([]Declaration
 	return records, nil
 }
 
-// GetWeeklyDebrief aggregates the week's customs attempts.
+// GetWeeklyDebrief aggregates customs attempts across days.
 func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 	rows, err := s.db.Query(
-		`SELECT d.day, d.manifest_id, COALESCE(m.name, d.manifest_id), d.adjective, d.container, d.attempt, d.status, d.emoji_row
-		 FROM declarations d
-		 LEFT JOIN manifests m ON d.manifest_id = m.id
-		 ORDER BY d.day ASC, d.attempt ASC`,
+		`SELECT day, manifest_id, manifest_name, adjective, container, attempt, status, emoji_row
+		 FROM declarations
+		 ORDER BY day ASC, attempt ASC`,
 	)
 	if err != nil {
 		return WeeklyDebrief{}, err
@@ -456,7 +359,6 @@ func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 	}
 	rate := (clearedCount * 100) / totalDays
 
-	// Format shareable text card
 	shareText := fmt.Sprintf("PRECEDENT Weekly Customs Debrief 📑\n")
 	shareText += fmt.Sprintf("Success Rate: %d/%d Days Cleared (%d%%)\n\n", clearedCount, totalDays, rate)
 	for _, ds := range summaries {
@@ -473,7 +375,7 @@ func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 		}
 		shareText += "\n"
 	}
-	shareText += "Smuggle your cargo past the codex at: https://github.com/jacobh0521/precedent"
+	shareText += "Smuggle your cargo: https://github.com/jacobh0521/precedent"
 
 	return WeeklyDebrief{
 		TotalDays:     totalDays,
@@ -485,7 +387,7 @@ func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 	}, nil
 }
 
-// AdvanceToNextDay increments day and resets attempts.
+// AdvanceToNextDay increments day and resets attempts to 1.
 func (s *Store) AdvanceToNextDay() (int, error) {
 	currentDay, err := s.GetCurrentDay()
 	if err != nil {
@@ -498,47 +400,12 @@ func (s *Store) AdvanceToNextDay() (int, error) {
 		return currentDay, err
 	}
 
-	nextDayManifests := []Manifest{
-		{
-			ID:          fmt.Sprintf("cargo-day%d-feline", nextDay),
-			Day:         nextDay,
-			Name:        "A QUANTUM CAT",
-			Traits:      []string{"living", "oversized"},
-			Description: "Simultaneously meowing and purring in super-position.",
-			FlavorText:  "Station policy: Do not look directly into the carrier.",
-		},
-		{
-			ID:          fmt.Sprintf("cargo-day%d-nebula", nextDay),
-			Day:         nextDay,
-			Name:        "A BOTTLED NEBULA",
-			Traits:      []string{"wet", "oversized"},
-			Description: "Stellar dust cloud condensing into ionized precipitation.",
-			FlavorText:  "Declared value: One small galaxy.",
-		},
-	}
-
-	for _, m := range nextDayManifests {
-		var exists int
-		_ = s.db.QueryRow(`SELECT COUNT(*) FROM manifests WHERE id = ?`, m.ID).Scan(&exists)
-		if exists == 0 {
-			traitsJSON, _ := json.Marshal(m.Traits)
-			_, _ = s.db.Exec(
-				`INSERT INTO manifests (id, day, name, traits, description, flavor_text) VALUES (?, ?, ?, ?, ?, ?)`,
-				m.ID, m.Day, m.Name, string(traitsJSON), m.Description, m.FlavorText,
-			)
-		}
-	}
-
-	if len(nextDayManifests) > 0 {
-		_ = s.SetSelectedManifestID(nextDayManifests[0].ID)
-	}
-
 	return nextDay, nil
 }
 
 // ResetToDay1 resets game state and laws back to starter 5 rules.
 func (s *Store) ResetToDay1() error {
-	_, err := s.db.Exec(`UPDATE game_state SET current_day = 1, selected_manifest_id = 'cargo-giraffe', attempt_count = 1 WHERE id = 1`)
+	_, err := s.db.Exec(`UPDATE game_state SET current_day = 1, attempt_count = 1 WHERE id = 1`)
 	if err != nil {
 		return err
 	}

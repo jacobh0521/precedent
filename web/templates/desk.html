@@ -1,46 +1,28 @@
 {{define "desk"}}
-<div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
+<div class="max-w-3xl mx-auto px-4 py-8 space-y-8">
 
-    <!-- 1. Parcel Selector Tabs -->
-    <div class="flex items-center justify-center space-x-2">
-        {{range .Manifests}}
-        <a href="/select-manifest?manifest_id={{.ID}}"
-           class="px-4 py-2 rounded-full font-mono text-xs font-bold transition flex items-center space-x-2 border
-           {{if eq .ID $.SelectedManifest.ID}}
-               bg-amber-500 text-stone-950 border-amber-400 shadow-md scale-105
-           {{else}}
-               bg-stone-900 text-stone-400 border-stone-800 hover:border-stone-600
-           {{end}}">
-            <span>📦</span>
-            <span>{{.Name}}</span>
-        </a>
-        {{end}}
-    </div>
-
-    <!-- 2. Big Centered Contraband -->
+    <!-- Big Centered Daily Contraband -->
     <div class="text-center space-y-2 py-4">
         <span class="text-xs font-mono tracking-widest uppercase text-amber-500 font-bold block">
-            TODAY'S CONTRABAND TO SMUGGLE
+            DAY {{.CurrentDay}} CONTRABAND TO SMUGGLE
         </span>
         <h1 class="text-4xl sm:text-5xl font-black font-mono tracking-tight text-manila-100 uppercase">
-            {{.SelectedManifest.Name}}
+            {{.TodayManifest.Name}}
         </h1>
         <p class="text-sm font-sans text-stone-300 max-w-lg mx-auto">
-            {{.SelectedManifest.Description}}
+            {{.TodayManifest.Description}}
         </p>
         <p class="text-xs font-mono text-stone-500 italic">
-            "{{.SelectedManifest.FlavorText}}"
+            "{{.TodayManifest.FlavorText}}"
         </p>
     </div>
 
-    <!-- 3. Wordle-Style Rule Lights Board -->
+    <!-- Wordle-Style Rule Lights Board -->
     <div class="bg-bureau-card border border-bureau-border rounded-xl p-5 shadow-xl space-y-4">
         <div class="flex items-center justify-between border-b border-bureau-border pb-3">
-            <div class="flex items-center space-x-2">
-                <span class="text-xs font-mono uppercase tracking-wider text-stone-400 font-bold">
-                    CHECKPOINT RULE SIGNPOSTS
-                </span>
-            </div>
+            <span class="text-xs font-mono uppercase tracking-wider text-stone-400 font-bold">
+                ACTIVE CHECKPOINT LAWS ({{len .ActiveLaws}})
+            </span>
             
             <!-- 3 Attempts Daily Limit Indicator -->
             <div class="flex items-center space-x-1.5 font-mono text-xs">
@@ -60,21 +42,21 @@
             </div>
         </div>
 
-        <!-- The 4-Word Signpost Badges -->
-        <div id="rule-board" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        <!-- 4-Word Signpost Badges -->
+        <div id="rule-board" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {{range .ActiveLaws}}
             <div class="rule-light-neutral border rounded-lg p-3 text-center transition-all duration-300 flex flex-col justify-center items-center h-20 shadow-sm
-                {{if gt .Day 1}} border-amber-600/70 bg-amber-950/20 {{end}}">
+                {{if gt .Day 1}} border-amber-500/80 bg-amber-950/20 {{end}}">
                 <span class="font-mono font-black text-sm tracking-wide uppercase leading-tight">
                     {{.Signpost}}
                 </span>
                 {{if gt .Day 1}}
                 <span class="text-[10px] font-mono text-amber-400 font-bold mt-1 uppercase tracking-widest">
-                    ⚡ NEW COMPILED LAW
+                    ⚡ PRECEDENT LAW (DAY {{.Day}})
                 </span>
                 {{else}}
                 <span class="text-[10px] font-mono text-stone-400 font-semibold mt-1">
-                    STANDBY
+                    PERMANENT CODEX
                 </span>
                 {{end}}
             </div>
@@ -82,23 +64,9 @@
         </div>
     </div>
 
-    <!-- 4. Wordle-Style User Entry Disguise Inputs -->
+    <!-- Wordle-Style Pure Text Entry (No Banks) -->
     <div class="bg-bureau-card border border-bureau-border rounded-xl p-6 shadow-xl space-y-6">
         <form hx-post="/declare" hx-target="#verdict-area" hx-swap="innerHTML" class="space-y-6">
-            <input type="hidden" name="manifest_id" value="{{.SelectedManifest.ID}}">
-
-            <!-- Datalists for Autocomplete Suggestions -->
-            <datalist id="adjective-suggestions">
-                {{range .AdjectiveSuggestions}}
-                <option value="{{.}}">
-                {{end}}
-            </datalist>
-
-            <datalist id="container-suggestions">
-                {{range .ContainerSuggestions}}
-                <option value="{{.}}">
-                {{end}}
-            </datalist>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <!-- 1. Adjective Input -->
@@ -109,24 +77,11 @@
                     <input type="text" 
                            id="adjective-input" 
                            name="adjective" 
-                           list="adjective-suggestions"
-                           placeholder="e.g. Inflatable, Taxidermied, Folded..." 
+                           placeholder="e.g. Inflatable, Metaphorical, Folded..." 
                            autocomplete="off"
                            required
                            oninput="updateStampButton()"
                            class="w-full px-4 py-3 rounded-lg bg-stone-900 border border-stone-700 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400">
-                    
-                    <!-- Quick Idea Chips -->
-                    <div class="flex flex-wrap gap-1.5 pt-1">
-                        <span class="text-[10px] text-stone-500 font-mono self-center mr-1">Ideas:</span>
-                        {{range $i, $w := .AdjectiveSuggestions}}
-                        {{if lt $i 6}}
-                        <button type="button" onclick="setWord('adjective-input', '{{$w}}')" class="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-800/80 hover:bg-stone-700 text-stone-400 hover:text-amber-300 border border-stone-700">
-                            {{$w}}
-                        </button>
-                        {{end}}
-                        {{end}}
-                    </div>
                 </div>
 
                 <!-- 2. Container Input -->
@@ -137,24 +92,11 @@
                     <input type="text" 
                            id="container-input" 
                            name="container" 
-                           list="container-suggestions"
-                           placeholder="e.g. Pocket, Envelope, Matchbox..." 
+                           placeholder="e.g. Envelope, Pocket, Matchbox..." 
                            autocomplete="off"
                            required
                            oninput="updateStampButton()"
                            class="w-full px-4 py-3 rounded-lg bg-stone-900 border border-stone-700 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400">
-                    
-                    <!-- Quick Idea Chips -->
-                    <div class="flex flex-wrap gap-1.5 pt-1">
-                        <span class="text-[10px] text-stone-500 font-mono self-center mr-1">Ideas:</span>
-                        {{range $i, $w := .ContainerSuggestions}}
-                        {{if lt $i 6}}
-                        <button type="button" onclick="setWord('container-input', '{{$w}}')" class="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-800/80 hover:bg-stone-700 text-stone-400 hover:text-amber-300 border border-stone-700">
-                            {{$w}}
-                        </button>
-                        {{end}}
-                        {{end}}
-                    </div>
                 </div>
             </div>
 
@@ -171,7 +113,7 @@
         </form>
     </div>
 
-    <!-- 5. Wordle Feedback & Stamp Target Area -->
+    <!-- Wordle Feedback & Stamp Target Area -->
     <div id="verdict-area">
         <!-- Rendered dynamically by HTMX -->
     </div>
@@ -180,11 +122,6 @@
 
 <!-- Client-side helper -->
 <script>
-    function setWord(inputId, val) {
-        document.getElementById(inputId).value = val;
-        updateStampButton();
-    }
-
     function updateStampButton() {
         const adj = document.getElementById('adjective-input').value.trim();
         const cnt = document.getElementById('container-input').value.trim();
