@@ -18,52 +18,45 @@ type GameHandler struct {
 	templates *template.Template
 }
 
-// 8 Adjective Chips & 8 Container Chips
+// Word suggestions for datalists and quick-pick chips
 var (
-	AdjectiveChips = []string{
-		"Inflatable",
-		"Dehydrated",
-		"Folded",
-		"Metaphorical",
-		"Frozen",
-		"Microscopic",
-		"Ceremonial",
-		"Rental",
+	AdjectiveSuggestions = []string{
+		"Inflatable", "Dehydrated", "Folded", "Metaphorical", "Frozen",
+		"Microscopic", "Taxidermied", "Robotic", "Ceremonial", "Rental",
+		"Origami", "Plastic", "Wooden", "Ghostly", "Digital",
+		"Holographic", "Miniature", "Stuffed", "Decoy", "Paper",
 	}
 
-	ContainerChips = []string{
-		"Envelope",
-		"Pocket",
-		"Thermos",
-		"Cardboard Box",
-		"Velvet Pouch",
-		"Glass Jar",
-		"Lead Crate",
-		"Mesh Bag",
+	ContainerSuggestions = []string{
+		"Envelope", "Pocket", "Matchbox", "Thermos", "Velvet Pouch",
+		"Cardboard Box", "Glass Jar", "Lead Crate", "Mesh Bag", "Sock",
+		"Coin Purse", "Thimble", "Ziploc Bag", "Tin Can", "Briefcase",
+		"Backpack", "Shoebox", "Pillowcase", "Lunchbox", "Ammo Can",
 	}
 )
 
 // DeskViewData holds data for the main play view.
 type DeskViewData struct {
-	CurrentDay       int
-	AttemptCount     int
-	MaxAttempts      int
-	Manifests        []db.Manifest
-	SelectedManifest *db.Manifest
-	ActiveLaws       []rules.Law
-	AdjectiveChips   []string
-	ContainerChips   []string
-	LastVerdict      *rules.AuditVerdict
+	CurrentDay           int
+	AttemptCount         int
+	MaxAttempts          int
+	Manifests            []db.Manifest
+	SelectedManifest     *db.Manifest
+	ActiveLaws           []rules.Law
+	AdjectiveSuggestions []string
+	ContainerSuggestions []string
+	WeeklyDebrief        db.WeeklyDebrief
 }
 
 // VerdictPartialData holds data passed to verdict.html.
 type VerdictPartialData struct {
-	Verdict    rules.AuditVerdict
-	Manifest   db.Manifest
-	Disguise   rules.Disguise
-	ActiveLaws []rules.Law
-	CurrentDay int
-	OutOfTries bool
+	Verdict        rules.AuditVerdict
+	Manifest       db.Manifest
+	Disguise       rules.Disguise
+	ActiveLaws     []rules.Law
+	CurrentDay     int
+	OutOfTries     bool
+	DailyShareText string
 }
 
 // NewGameHandler initializes handler with template parsing.
@@ -100,6 +93,7 @@ func (h *GameHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/", h.HandleDeskView)
 	r.Post("/declare", h.HandleSubmitDisguise)
 	r.Get("/select-manifest", h.HandleSelectManifest)
+	r.Get("/weekly-debrief", h.HandleWeeklyDebrief)
 	r.Post("/retry", h.HandleRetryAttempts)
 	r.Post("/dev/next-day", h.HandleSimulateNextDay)
 	r.Post("/dev/reset", h.HandleResetDay1)
@@ -135,16 +129,18 @@ func (h *GameHandler) HandleDeskView(w http.ResponseWriter, r *http.Request) {
 	}
 
 	activeLaws, _ := h.store.GetActiveLaws()
+	weeklyDebrief, _ := h.store.GetWeeklyDebrief()
 
 	data := DeskViewData{
-		CurrentDay:       currentDay,
-		AttemptCount:     attemptCount,
-		MaxAttempts:      5,
-		Manifests:        dayManifests,
-		SelectedManifest: selectedManifest,
-		ActiveLaws:       activeLaws,
-		AdjectiveChips:   AdjectiveChips,
-		ContainerChips:   ContainerChips,
+		CurrentDay:           currentDay,
+		AttemptCount:         attemptCount,
+		MaxAttempts:          3, // 3 attempts per day
+		Manifests:            dayManifests,
+		SelectedManifest:     selectedManifest,
+		ActiveLaws:           activeLaws,
+		AdjectiveSuggestions: AdjectiveSuggestions,
+		ContainerSuggestions: ContainerSuggestions,
+		WeeklyDebrief:        weeklyDebrief,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -167,7 +163,7 @@ func (h *GameHandler) HandleSelectManifest(w http.ResponseWriter, r *http.Reques
 	http.Redirect(w, r, "/?manifest_id="+manifestID, http.StatusSeeOther)
 }
 
-// HandleSubmitDisguise evaluates the 2-click disguise against active laws.
+// HandleSubmitDisguise evaluates user-entered disguise against active laws.
 func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "Malformed form", http.StatusBadRequest)
@@ -175,8 +171,15 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	}
 
 	manifestID := r.FormValue("manifest_id")
-	adjective := r.FormValue("adjective")
-	container := r.FormValue("container")
+	adjective := strings.TrimSpace(r.FormValue("adjective"))
+	container := strings.TrimSpace(r.FormValue("container"))
+
+	if adjective == "" {
+		adjective = "Unmodified"
+	}
+	if container == "" {
+		container = "Bare Hands"
+	}
 
 	manifest, err := h.store.GetManifestByID(manifestID)
 	if err != nil {
@@ -196,7 +199,7 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	cargo := manifest.ToCargo()
 	verdict := rules.Evaluate(activeLaws, cargo, disguise, attemptCount)
 
-	// If Cleared: Compile punchline law and advance
+	// If Cleared: Compile punchline law
 	if verdict.Passed {
 		newLaw := rules.CompilePunchlineLaw(currentDay+1, cargo, disguise, len(activeLaws))
 		_, err := h.store.SaveLaw(newLaw)
@@ -204,8 +207,8 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 			verdict.Punchline = &newLaw
 		}
 	} else {
-		// Increment attempts if confiscated
-		if attemptCount < 5 {
+		// Increment attempts (up to 3)
+		if attemptCount < 3 {
 			_, _ = h.store.IncrementAttempt()
 		}
 	}
@@ -213,15 +216,20 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	_ = h.store.SaveDeclaration(manifestID, currentDay, disguise, attemptCount, verdict)
 	updatedLaws, _ := h.store.GetActiveLaws()
 
-	outOfTries := (!verdict.Passed && attemptCount >= 5)
+	outOfTries := (!verdict.Passed && attemptCount >= 3)
+
+	// Fetch all attempts today for this manifest to construct the Wordle-like share text
+	records, _ := h.store.GetDeclarationsForDay(manifestID, currentDay)
+	shareText := formatDailyShare(currentDay, manifest.Name, verdict.Passed, attemptCount, records, verdict.Punchline)
 
 	partialData := VerdictPartialData{
-		Verdict:    verdict,
-		Manifest:   *manifest,
-		Disguise:   disguise,
-		ActiveLaws: updatedLaws,
-		CurrentDay: currentDay,
-		OutOfTries: outOfTries,
+		Verdict:        verdict,
+		Manifest:       *manifest,
+		Disguise:       disguise,
+		ActiveLaws:     updatedLaws,
+		CurrentDay:     currentDay,
+		OutOfTries:     outOfTries,
+		DailyShareText: shareText,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -231,6 +239,34 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func formatDailyShare(day int, cargoName string, cleared bool, attempts int, records []db.DeclarationRecord, punchline *rules.Law) string {
+	score := fmt.Sprintf("%d/3", attempts)
+	if !cleared && attempts >= 3 {
+		score = "X/3"
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("PRECEDENT Day %d %s\n", day, score))
+	sb.WriteString(fmt.Sprintf("Contraband: %s\n\n", cargoName))
+
+	for _, rec := range records {
+		sb.WriteString(fmt.Sprintf("%s (%s + %s)\n", rec.EmojiRow, rec.Adjective, rec.Container))
+	}
+
+	if punchline != nil {
+		sb.WriteString(fmt.Sprintf("\n⚖️ New Precedent: %s\n", punchline.Signpost))
+	}
+	sb.WriteString("\nSmuggle your cargo: https://github.com/jacobh0521/precedent")
+	return sb.String()
+}
+
+// HandleWeeklyDebrief displays the week's end customs report modal.
+func (h *GameHandler) HandleWeeklyDebrief(w http.ResponseWriter, r *http.Request) {
+	debrief, _ := h.store.GetWeeklyDebrief()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = h.templates.ExecuteTemplate(w, "weekly_debrief.html", debrief)
 }
 
 // HandleRetryAttempts resets attempt count to 1 for the current parcel.

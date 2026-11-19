@@ -24,10 +24,10 @@ func (c Cargo) HasTrait(t string) bool {
 	return false
 }
 
-// Disguise is the 2-click player declaration: 1 Adjective + 1 Container.
+// Disguise is the player's 2-part disguise (Adjective + Container).
 type Disguise struct {
-	Adjective string `json:"adjective"` // e.g. "Inflatable", "Dehydrated", "Folded", "Metaphorical"
-	Container string `json:"container"` // e.g. "Envelope", "Pocket", "Glass Jar", "Lead Crate", "Thermos"
+	Adjective string `json:"adjective"` // e.g. "Inflatable", "Dehydrated", "Taxidermied"
+	Container string `json:"container"` // e.g. "Envelope", "Pocket", "Matchbox"
 }
 
 // Law represents a 4-word signpost rule.
@@ -55,7 +55,8 @@ type AuditVerdict struct {
 	Status      string      `json:"status"` // "CLEARED" or "CONFISCATED"
 	Audits      []RuleAudit `json:"audits"`
 	Attempt     int         `json:"attempt"`
-	MaxAttempts int         `json:"max_attempts"`
+	MaxAttempts int         `json:"max_attempts"` // 3 attempts per day
+	EmojiRow    string      `json:"emoji_row"`    // e.g. "🟩🟩🟩🟩🟩" or "🟥🟩🟩🟩🟩"
 	Punchline   *Law        `json:"punchline,omitempty"`
 }
 
@@ -95,6 +96,62 @@ func StarterLaws() []Law {
 	}
 }
 
+// Broad dictionaries of semantic keywords for open text user entry
+var (
+	NonLivingAdjectives = []string{
+		"inflatable", "metaphorical", "robotic", "mechanical", "taxidermied",
+		"plastic", "wooden", "stuffed", "plush", "fake", "artificial",
+		"holographic", "digital", "toy", "ceramic", "replica", "synthetic",
+		"imaginary", "fictional", "balloon", "origami", "painted", "drawn",
+		"ghostly", "spectral", "abstract", "symbolic", "spiritual", "allegorical",
+		"virtual", "decoy", "paper", "cardboard", "porcelain", "plaster",
+	}
+
+	GlassKeywords = []string{
+		"glass", "jar", "bottle", "vial", "flagon", "test tube", "flask",
+		"beaker", "bulb", "aquarium", "terrarium", "decanter", "goblet",
+		"chalice", "mason jar", "petri dish", "ampoule",
+	}
+
+	PocketContainers = []string{
+		"pocket", "envelope", "velvet pouch", "pouch", "wallet", "sock",
+		"thimble", "matchbox", "glove", "baggie", "capsule", "coin purse",
+		"locket", "pillbox", "packet", "folder", "thermos", "ziploc",
+		"sleeve", "sheath", "can", "tin can", "pocketbook",
+	}
+
+	CompressingAdjectives = []string{
+		"folded", "microscopic", "inflatable", "miniature", "tiny", "shrunk",
+		"compressed", "flattened", "pocket-sized", "nano", "subatomic",
+		"compact", "deflated", "metaphorical", "abstract", "digital", "virtual",
+		"origami", "dehydrated", "crushed", "condensed",
+	}
+
+	DryAdjectives = []string{
+		"dehydrated", "dried", "freeze-dried", "frozen", "powdered", "powder",
+		"metaphorical", "evaporated", "baked", "burnt", "toasted", "cured",
+		"smoked", "crystallized", "solidified", "digital", "abstract",
+		"taxidermied", "wooden", "plastic", "paper", "desiccated",
+	}
+
+	MetalKeywords = []string{
+		"lead crate", "thermos", "metal", "lead", "steel", "iron", "tin",
+		"aluminum", "safe", "vault", "can", "tin can", "cage", "toolbox",
+		"lockbox", "ammo can", "brass box", "bronze urn", "copper pot",
+		"foil", "titanium", "silver", "gold", "cast iron",
+	}
+)
+
+func matchAnyKeyword(text string, keywords []string) bool {
+	t := strings.ToLower(strings.TrimSpace(text))
+	for _, kw := range keywords {
+		if strings.Contains(t, kw) || strings.Contains(kw, t) {
+			return true
+		}
+	}
+	return false
+}
+
 // EvaluateRule evaluates a single law against the cargo and player's disguise.
 func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 	adj := strings.ToLower(strings.TrimSpace(d.Adjective))
@@ -102,55 +159,47 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 
 	switch law.RuleType {
 	case "no_living":
-		// Violated if cargo is living, UNLESS disguised as non-living (Inflatable, Metaphorical, Robotic)
 		if cargo.HasTrait("living") {
-			if adj == "inflatable" || adj == "metaphorical" {
-				return true // Slipped past!
+			// Slipped past if declared as non-living (e.g. Inflatable, Taxidermied, Robotic, Metaphorical)
+			if matchAnyKeyword(adj, NonLivingAdjectives) {
+				return true
 			}
 			return false // Busted!
 		}
 		return true
 
 	case "no_glass":
-		// Violated if container is glass
-		if strings.Contains(cnt, "glass") {
+		if matchAnyKeyword(cnt, GlassKeywords) {
 			return false // Busted!
 		}
 		return true
 
 	case "pocket_only":
-		// Must fit in a pocket.
-		// Containers that naturally fit: envelope, pocket, velvet pouch, thermos
-		// OR adjectives that make things fit: folded, microscopic, inflatable (deflated!)
-		isPocketContainer := cnt == "pocket" || cnt == "envelope" || cnt == "velvet pouch"
-		isCompressingAdj := adj == "folded" || adj == "microscopic" || adj == "inflatable"
-
-		if isPocketContainer || isCompressingAdj {
+		// Must fit in a pocket: either container fits in pocket OR adjective compresses it
+		if matchAnyKeyword(cnt, PocketContainers) || matchAnyKeyword(adj, CompressingAdjectives) {
 			return true // Slipped past!
 		}
-		return false // Busted! (e.g. Lead Crate, Cardboard Box without compression)
+		return false // Busted!
 
 	case "no_wet":
-		// Violated if cargo is wet, UNLESS dehydrated, frozen, metaphorical, or in sealed thermos
 		if cargo.HasTrait("wet") {
-			if adj == "dehydrated" || adj == "frozen" || adj == "metaphorical" || cnt == "thermos" {
-				return true // Slipped past!
+			// Slipped past if dehydrated, frozen, dry adjective, or sealed container (like thermos)
+			if matchAnyKeyword(adj, DryAdjectives) || strings.Contains(cnt, "thermos") || strings.Contains(cnt, "vacuum") {
+				return true
 			}
 			return false // Busted!
 		}
 		return true
 
 	case "no_metal":
-		// Violated if container contains metal
-		if cnt == "lead crate" || cnt == "thermos" {
+		if matchAnyKeyword(cnt, MetalKeywords) {
 			return false // Busted!
 		}
 		return true
 
 	case "custom_punchline":
-		// Specific ban on winning combo, e.g. "NO INFLATABLE GIRAFFES"
 		targetAdj := strings.ToLower(strings.TrimSpace(law.TargetAdj))
-		if adj == targetAdj && cargoMatches(cargo.Name, law.TargetCargo) {
+		if strings.Contains(adj, targetAdj) && cargoMatches(cargo.Name, law.TargetCargo) {
 			return false // Busted by yesterday's precedent!
 		}
 		return true
@@ -170,10 +219,11 @@ func cargoMatches(name, target string) bool {
 		strings.Contains(n, tSingular) || strings.Contains(nSingular, tSingular)
 }
 
-// Evaluate evaluates all active laws against cargo and disguise.
+// Evaluate evaluates all active laws against cargo and disguise (Max 3 attempts).
 func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 	allPassed := true
 	audits := make([]RuleAudit, 0, len(laws))
+	var emojiBuilder strings.Builder
 
 	for _, law := range laws {
 		passed := EvaluateRule(law, cargo, d)
@@ -181,6 +231,9 @@ func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 		if !passed {
 			allPassed = false
 			status = "BUSTED"
+			emojiBuilder.WriteString("🟥")
+		} else {
+			emojiBuilder.WriteString("🟩")
 		}
 		audits = append(audits, RuleAudit{
 			LawID:    law.ID,
@@ -200,12 +253,12 @@ func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 		Status:      verdictStatus,
 		Audits:      audits,
 		Attempt:     attempt,
-		MaxAttempts: 5,
+		MaxAttempts: 3, // 3 attempts per user per day
+		EmojiRow:    emojiBuilder.String(),
 	}
 }
 
 // CompilePunchlineLaw creates a 3-4 word punchline ban from the winning loophole.
-// e.g. "NO INFLATABLE GIRAFFES", "NO DEHYDRATED WEATHER", "NO METAPHORICAL REGRETS"
 func CompilePunchlineLaw(nextDay int, cargo Cargo, d Disguise, lawCount int) Law {
 	noun := simplifyCargoName(cargo.Name)
 	adj := strings.ToUpper(strings.TrimSpace(d.Adjective))
@@ -241,7 +294,6 @@ func simplifyCargoName(name string) string {
 		return "DEBT"
 	}
 
-	// Fallback: take last word and pluralize/uppercase
 	words := strings.Fields(strings.ToUpper(name))
 	if len(words) > 0 {
 		last := words[len(words)-1]

@@ -1,0 +1,72 @@
+<div id="weekly-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+    <div class="bg-stone-900 border-2 border-amber-500/80 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-6 text-stone-100 font-mono relative">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between border-b border-stone-800 pb-3">
+            <div>
+                <span class="text-xs text-amber-400 font-bold tracking-widest uppercase block">CUSTOMS RETROSPECTIVE</span>
+                <h2 class="text-xl font-black text-manila-100 uppercase tracking-tight">Weekly Smuggling Debrief</h2>
+            </div>
+            <button onclick="document.getElementById('weekly-modal').remove()" class="text-stone-400 hover:text-stone-100 text-lg font-bold">✕</button>
+        </div>
+
+        <!-- Weekly Performance Stat Badges -->
+        <div class="grid grid-cols-3 gap-3 text-center">
+            <div class="bg-stone-950 p-3 rounded-lg border border-stone-800">
+                <span class="text-[10px] text-stone-400 block uppercase">Cleared Days</span>
+                <span class="text-2xl font-black text-emerald-400">{{.ClearedDays}}/{{.TotalDays}}</span>
+            </div>
+            <div class="bg-stone-950 p-3 rounded-lg border border-stone-800">
+                <span class="text-[10px] text-stone-400 block uppercase">Success Rate</span>
+                <span class="text-2xl font-black text-amber-400">{{.SuccessRate}}%</span>
+            </div>
+            <div class="bg-stone-950 p-3 rounded-lg border border-stone-800">
+                <span class="text-[10px] text-stone-400 block uppercase">Total Attempts</span>
+                <span class="text-2xl font-black text-stone-200">{{.TotalAttempts}}</span>
+            </div>
+        </div>
+
+        <!-- Specific Path Breakdown for Each Day -->
+        <div class="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <span class="text-xs text-stone-400 uppercase tracking-wider block font-bold">Daily Customs Path:</span>
+            {{range .DaySummaries}}
+            <div class="p-2.5 rounded bg-stone-950 border border-stone-800 text-xs flex items-center justify-between">
+                <div>
+                    <span class="font-bold text-amber-300">Day {{.Day}}:</span>
+                    <span class="text-stone-300 ml-1 font-semibold">{{.ManifestName}}</span>
+                    {{if .Cleared}}
+                    <div class="text-[11px] text-emerald-400 font-sans mt-0.5">
+                        ↳ Slipped past: <span class="font-mono font-bold">{{.WinningPath}}</span>
+                    </div>
+                    {{end}}
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
+                        {{if .Cleared}} bg-emerald-950 text-emerald-400 border border-emerald-800 {{else}} bg-rose-950 text-rose-400 border border-rose-800 {{end}}">
+                        {{if .Cleared}}CLEARED ({{.AttemptsUsed}}/3){{else}}BUSTED (3/3){{end}}
+                    </span>
+                </div>
+            </div>
+            {{else}}
+            <div class="text-xs text-stone-500 italic text-center py-4">No customs records for this week yet.</div>
+            {{end}}
+        </div>
+
+        <!-- Share Actions -->
+        <div class="pt-2 border-t border-stone-800 flex items-center justify-between gap-3">
+            <span id="weekly-copy-toast" class="text-xs text-emerald-400 font-bold hidden">✓ Debrief Copied!</span>
+            <div class="flex space-x-2 ml-auto">
+                <button type="button" 
+                        onclick="copyShareText({{.ShareText}}, 'weekly-copy-toast')"
+                        class="px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs uppercase tracking-wider transition shadow-lg flex items-center space-x-1.5">
+                    <span>📋</span>
+                    <span>Copy Weekly Debrief (Wordle-Style)</span>
+                </button>
+                <button type="button" onclick="document.getElementById('weekly-modal').remove()" class="px-3 py-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs">
+                    Close
+                </button>
+            </div>
+        </div>
+
+    </div>
+</div>

@@ -42,11 +42,11 @@
                 </span>
             </div>
             
-            <!-- Attempt Indicator Pips -->
+            <!-- 3 Attempts Daily Limit Indicator -->
             <div class="flex items-center space-x-1.5 font-mono text-xs">
-                <span class="text-stone-400 mr-2">TRIES:</span>
-                {{range $i := seq 5}}
-                <span class="w-3.5 h-3.5 rounded-full border transition flex items-center justify-center text-[9px] font-bold
+                <span class="text-stone-400 mr-2 font-bold">DAILY ATTEMPTS:</span>
+                {{range $i := seq 3}}
+                <span class="w-4 h-4 rounded-full border transition flex items-center justify-center text-[10px] font-bold
                     {{if lt $i $.AttemptCount}}
                         bg-rose-500 border-rose-400 text-stone-950
                     {{else if eq $i $.AttemptCount}}
@@ -56,7 +56,7 @@
                     {{end}}">
                 </span>
                 {{end}}
-                <span class="text-stone-400 ml-1.5">({{.AttemptCount}}/5)</span>
+                <span class="text-stone-400 ml-1.5 font-bold">({{.AttemptCount}}/3)</span>
             </div>
         </div>
 
@@ -82,48 +82,79 @@
         </div>
     </div>
 
-    <!-- 4. 2-Click Disguise Tray -->
+    <!-- 4. Wordle-Style User Entry Disguise Inputs -->
     <div class="bg-bureau-card border border-bureau-border rounded-xl p-6 shadow-xl space-y-6">
         <form hx-post="/declare" hx-target="#verdict-area" hx-swap="innerHTML" class="space-y-6">
             <input type="hidden" name="manifest_id" value="{{.SelectedManifest.ID}}">
-            <input type="hidden" id="adjective-input" name="adjective" value="">
-            <input type="hidden" id="container-input" name="container" value="">
 
-            <!-- Step 1: Pick Adjective -->
-            <div>
-                <div class="flex items-center justify-between mb-2.5">
-                    <span class="font-mono text-xs uppercase font-bold text-manila-300 tracking-wider">
-                        1. PICK AN ADJECTIVE:
-                    </span>
-                    <span id="adj-selected-label" class="text-xs font-mono text-stone-400 italic">None selected</span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    {{range .AdjectiveChips}}
-                    <button type="button" 
-                            onclick="selectChip('adj', '{{.}}', this)"
-                            class="adj-chip px-3.5 py-2 rounded-lg font-mono text-xs font-bold border border-stone-700 bg-stone-900/80 text-stone-300 hover:border-amber-400 hover:text-stone-100 transition">
-                        {{.}}
-                    </button>
-                    {{end}}
-                </div>
-            </div>
+            <!-- Datalists for Autocomplete Suggestions -->
+            <datalist id="adjective-suggestions">
+                {{range .AdjectiveSuggestions}}
+                <option value="{{.}}">
+                {{end}}
+            </datalist>
 
-            <!-- Step 2: Pick Container -->
-            <div>
-                <div class="flex items-center justify-between mb-2.5">
-                    <span class="font-mono text-xs uppercase font-bold text-manila-300 tracking-wider">
-                        2. PICK A CONTAINER:
-                    </span>
-                    <span id="cnt-selected-label" class="text-xs font-mono text-stone-400 italic">None selected</span>
+            <datalist id="container-suggestions">
+                {{range .ContainerSuggestions}}
+                <option value="{{.}}">
+                {{end}}
+            </datalist>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <!-- 1. Adjective Input -->
+                <div class="space-y-2">
+                    <label for="adjective-input" class="block font-mono text-xs uppercase font-bold text-manila-300 tracking-wider">
+                        1. Contraband Adjective:
+                    </label>
+                    <input type="text" 
+                           id="adjective-input" 
+                           name="adjective" 
+                           list="adjective-suggestions"
+                           placeholder="e.g. Inflatable, Taxidermied, Folded..." 
+                           autocomplete="off"
+                           required
+                           oninput="updateStampButton()"
+                           class="w-full px-4 py-3 rounded-lg bg-stone-900 border border-stone-700 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400">
+                    
+                    <!-- Quick Idea Chips -->
+                    <div class="flex flex-wrap gap-1.5 pt-1">
+                        <span class="text-[10px] text-stone-500 font-mono self-center mr-1">Ideas:</span>
+                        {{range $i, $w := .AdjectiveSuggestions}}
+                        {{if lt $i 6}}
+                        <button type="button" onclick="setWord('adjective-input', '{{$w}}')" class="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-800/80 hover:bg-stone-700 text-stone-400 hover:text-amber-300 border border-stone-700">
+                            {{$w}}
+                        </button>
+                        {{end}}
+                        {{end}}
+                    </div>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    {{range .ContainerChips}}
-                    <button type="button" 
-                            onclick="selectChip('cnt', '{{.}}', this)"
-                            class="cnt-chip px-3.5 py-2 rounded-lg font-mono text-xs font-bold border border-stone-700 bg-stone-900/80 text-stone-300 hover:border-amber-400 hover:text-stone-100 transition">
-                        {{.}}
-                    </button>
-                    {{end}}
+
+                <!-- 2. Container Input -->
+                <div class="space-y-2">
+                    <label for="container-input" class="block font-mono text-xs uppercase font-bold text-manila-300 tracking-wider">
+                        2. Disguise Container:
+                    </label>
+                    <input type="text" 
+                           id="container-input" 
+                           name="container" 
+                           list="container-suggestions"
+                           placeholder="e.g. Pocket, Envelope, Matchbox..." 
+                           autocomplete="off"
+                           required
+                           oninput="updateStampButton()"
+                           class="w-full px-4 py-3 rounded-lg bg-stone-900 border border-stone-700 text-stone-100 font-mono text-sm focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400">
+                    
+                    <!-- Quick Idea Chips -->
+                    <div class="flex flex-wrap gap-1.5 pt-1">
+                        <span class="text-[10px] text-stone-500 font-mono self-center mr-1">Ideas:</span>
+                        {{range $i, $w := .ContainerSuggestions}}
+                        {{if lt $i 6}}
+                        <button type="button" onclick="setWord('container-input', '{{$w}}')" class="text-[11px] font-mono px-2 py-0.5 rounded bg-stone-800/80 hover:bg-stone-700 text-stone-400 hover:text-amber-300 border border-stone-700">
+                            {{$w}}
+                        </button>
+                        {{end}}
+                        {{end}}
+                    </div>
                 </div>
             </div>
 
@@ -131,11 +162,10 @@
             <div class="pt-2">
                 <button type="submit" 
                         id="stamp-button"
-                        disabled
                         class="w-full py-4 rounded-xl font-mono text-lg font-black tracking-widest uppercase transition shadow-2xl flex items-center justify-center space-x-3
-                               bg-stone-800 text-stone-500 cursor-not-allowed">
+                               bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 cursor-pointer">
                     <span>🔏</span>
-                    <span id="stamp-button-text">PICK 1 ADJECTIVE + 1 CONTAINER</span>
+                    <span id="stamp-button-text">STAMP DECLARATION</span>
                 </button>
             </div>
         </form>
@@ -148,43 +178,22 @@
 
 </div>
 
-<!-- Client-side chip selection logic -->
+<!-- Client-side helper -->
 <script>
-    let selectedAdj = "";
-    let selectedCnt = "";
+    function setWord(inputId, val) {
+        document.getElementById(inputId).value = val;
+        updateStampButton();
+    }
 
-    function selectChip(type, val, btn) {
-        if (type === 'adj') {
-            document.querySelectorAll('.adj-chip').forEach(b => {
-                b.classList.remove('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
-                b.classList.add('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
-            });
-            btn.classList.add('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
-            btn.classList.remove('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
-            selectedAdj = val;
-            document.getElementById('adjective-input').value = val;
-            document.getElementById('adj-selected-label').innerText = val;
-            document.getElementById('adj-selected-label').className = "text-xs font-mono text-amber-400 font-bold";
-        } else if (type === 'cnt') {
-            document.querySelectorAll('.cnt-chip').forEach(b => {
-                b.classList.remove('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
-                b.classList.add('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
-            });
-            btn.classList.add('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
-            btn.classList.remove('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
-            selectedCnt = val;
-            document.getElementById('container-input').value = val;
-            document.getElementById('cnt-selected-label').innerText = val;
-            document.getElementById('cnt-selected-label').className = "text-xs font-mono text-amber-400 font-bold";
-        }
-
-        const stampBtn = document.getElementById('stamp-button');
+    function updateStampButton() {
+        const adj = document.getElementById('adjective-input').value.trim();
+        const cnt = document.getElementById('container-input').value.trim();
         const stampText = document.getElementById('stamp-button-text');
 
-        if (selectedAdj && selectedCnt) {
-            stampBtn.disabled = false;
-            stampBtn.className = "w-full py-4 rounded-xl font-mono text-xl font-black tracking-widest uppercase transition shadow-2xl flex items-center justify-center space-x-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 cursor-pointer scale-100 hover:scale-[1.01]";
-            stampText.innerText = `STAMP: ${selectedAdj.toUpperCase()} IN ${selectedCnt.toUpperCase()}`;
+        if (adj && cnt) {
+            stampText.innerText = `STAMP: ${adj.toUpperCase()} IN ${cnt.toUpperCase()}`;
+        } else {
+            stampText.innerText = "STAMP DECLARATION";
         }
     }
 </script>

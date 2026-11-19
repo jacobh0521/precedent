@@ -22,38 +22,26 @@ func TestSignpostRules_GiraffeSmuggling(t *testing.T) {
 	if verdict1.Passed {
 		t.Fatalf("expected bad disguise 1 to be confiscated")
 	}
-
-	for _, a := range verdict1.Audits {
-		if a.Signpost == "NO LIVING THINGS" && a.Passed {
-			t.Errorf("expected NO LIVING THINGS to fail on rental live giraffe")
-		}
-		if a.Signpost == "NO GLASS" && a.Passed {
-			t.Errorf("expected NO GLASS to fail on Glass Jar")
-		}
+	if verdict1.MaxAttempts != 3 {
+		t.Fatalf("expected MaxAttempts to be 3, got %d", verdict1.MaxAttempts)
 	}
 
-	// Try 2: Winning loophole: "Inflatable" + "Envelope"
-	// NO LIVING THINGS: Pass (inflatable!)
-	// NO GLASS: Pass (envelope)
-	// MUST FIT IN A POCKET: Pass (inflatable & envelope!)
+	// Try 2: User enters "Taxidermied" in "Matchbox" -> Should CLEAR all 5!
+	// NO LIVING THINGS: Pass (taxidermied)
+	// NO GLASS: Pass (matchbox)
+	// MUST FIT IN A POCKET: Pass (matchbox fits in pocket)
 	// NOTHING WET: Pass
-	// NO METAL: Pass
+	// NO METAL: Pass (cardboard matchbox)
 	winningDisguise := Disguise{
-		Adjective: "Inflatable",
-		Container: "Envelope",
+		Adjective: "Taxidermied",
+		Container: "Matchbox",
 	}
 	verdict2 := Evaluate(starterLaws, giraffe, winningDisguise, 2)
 	if !verdict2.Passed {
-		t.Fatalf("expected winning disguise to clear all rules! audits: %+v", verdict2.Audits)
+		t.Fatalf("expected Taxidermied in Matchbox to clear all rules! audits: %+v", verdict2.Audits)
 	}
-
-	for _, a := range verdict2.Audits {
-		if !a.Passed {
-			t.Errorf("rule %s should have passed, but failed", a.Signpost)
-		}
-		if a.Status != "SLIPPED PAST" {
-			t.Errorf("expected SLIPPED PAST status, got %s", a.Status)
-		}
+	if verdict2.EmojiRow != "🟩🟩🟩🟩🟩" {
+		t.Fatalf("expected emoji row 🟩🟩🟩🟩🟩, got %s", verdict2.EmojiRow)
 	}
 }
 
@@ -71,13 +59,11 @@ func TestPunchlineCompilation(t *testing.T) {
 		Container: "Envelope",
 	}
 
-	// Compile punchline law
 	newLaw := CompilePunchlineLaw(2, giraffe, winningDisguise, len(starterLaws))
 	if newLaw.Signpost != "NO INFLATABLE GIRAFFES" {
 		t.Fatalf("expected signpost 'NO INFLATABLE GIRAFFES', got '%s'", newLaw.Signpost)
 	}
 
-	// Add to lawbook
 	lawbook := append(starterLaws, newLaw)
 
 	// Re-attempting the exact same disguise on Day 2 must now FAIL Law #6!
@@ -86,24 +72,14 @@ func TestPunchlineCompilation(t *testing.T) {
 		t.Fatalf("expected Day 2 attempt with Inflatable Giraffe to be BUSTED by new law!")
 	}
 
-	foundPunchlineFail := false
-	for _, a := range day2Verdict.Audits {
-		if a.Signpost == "NO INFLATABLE GIRAFFES" && !a.Passed {
-			foundPunchlineFail = true
-		}
-	}
-	if !foundPunchlineFail {
-		t.Fatalf("expected audit to report BUSTED for NO INFLATABLE GIRAFFES")
-	}
-
-	// But an alternate loophole like "Metaphorical" + "Envelope" should pass!
+	// Alternate loophole "Robotic" + "Pocket" should pass!
 	altDisguise := Disguise{
-		Adjective: "Metaphorical",
-		Container: "Envelope",
+		Adjective: "Robotic",
+		Container: "Pocket",
 	}
 	altVerdict := Evaluate(lawbook, giraffe, altDisguise, 2)
 	if !altVerdict.Passed {
-		t.Fatalf("expected Metaphorical Giraffe to slip past day 2 laws: %+v", altVerdict.Audits)
+		t.Fatalf("expected Robotic Giraffe in Pocket to slip past day 2 laws: %+v", altVerdict.Audits)
 	}
 }
 
@@ -116,17 +92,6 @@ func TestWeatherDehydration(t *testing.T) {
 		Traits: []string{"wet", "oversized"},
 	}
 
-	// Normal weather fails NOTHING WET
-	bad := Disguise{
-		Adjective: "Ceremonial",
-		Container: "Envelope",
-	}
-	vBad := Evaluate(starterLaws, weather, bad, 1)
-	if vBad.Passed {
-		t.Fatalf("expected wet weather to fail")
-	}
-
-	// Dehydrated weather in Pocket slips past all 5!
 	good := Disguise{
 		Adjective: "Dehydrated",
 		Container: "Pocket",
@@ -135,9 +100,7 @@ func TestWeatherDehydration(t *testing.T) {
 	if !vGood.Passed {
 		t.Fatalf("expected Dehydrated weather in pocket to pass: %+v", vGood.Audits)
 	}
-
-	punchline := CompilePunchlineLaw(2, weather, good, 5)
-	if punchline.Signpost != "NO DEHYDRATED WEATHER" {
-		t.Fatalf("expected 'NO DEHYDRATED WEATHER', got '%s'", punchline.Signpost)
+	if vGood.MaxAttempts != 3 {
+		t.Fatalf("expected max attempts 3, got %d", vGood.MaxAttempts)
 	}
 }

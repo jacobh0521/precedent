@@ -92,6 +92,13 @@
             <div class="px-3 py-1 bg-stone-900 border border-stone-700 rounded text-manila-300">
                 CYCLE: <span class="font-bold text-amber-400">DAY {{.CurrentDay}}</span>
             </div>
+
+            <!-- Weekly Customs Debrief Button -->
+            <button hx-get="/weekly-debrief" hx-target="#modal-container" hx-swap="innerHTML"
+                    class="px-3 py-1 rounded bg-stone-800 hover:bg-stone-700 text-amber-400 font-bold border border-amber-600/40 flex items-center space-x-1.5 transition">
+                <span>📊</span>
+                <span>Weekly Debrief</span>
+            </button>
             
             <form hx-post="/dev/next-day" hx-swap="none" class="inline">
                 <button type="submit" class="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold transition">
@@ -112,5 +119,21 @@
         {{template "desk" .}}
     </main>
 
+    <!-- Modal Container for Weekly Debrief -->
+    <div id="modal-container"></div>
+
+    <script>
+        function copyShareText(text, toastId) {
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById(toastId);
+                if (toast) {
+                    toast.classList.remove('hidden');
+                    setTimeout(() => toast.classList.add('hidden'), 3000);
+                }
+            }).catch(err => {
+                alert("Copied to clipboard!");
+            });
+        }
+    </script>
 </body>
 </html>

@@ -39,8 +39,29 @@ type DeclarationRecord struct {
 	Container    string            `json:"container"`
 	Attempt      int               `json:"attempt"`
 	Status       string            `json:"status"` // "CLEARED" or "CONFISCATED"
+	EmojiRow     string            `json:"emoji_row"`
 	AuditResults []rules.RuleAudit `json:"audit_results"`
 	CreatedAt    time.Time         `json:"created_at"`
+}
+
+// DaySummary holds summary of a day's smuggling attempt.
+type DaySummary struct {
+	Day          int      `json:"day"`
+	ManifestName string   `json:"manifest_name"`
+	Cleared      bool     `json:"cleared"`
+	AttemptsUsed int      `json:"attempts_used"`
+	WinningPath  string   `json:"winning_path"` // e.g. "Inflatable in Envelope"
+	Attempts     []string `json:"attempts"`     // List of "🟩🟩🟩🟩🟩 (Inflatable + Envelope)"
+}
+
+// WeeklyDebrief holds aggregate weekly player performance.
+type WeeklyDebrief struct {
+	TotalDays     int          `json:"total_days"`
+	ClearedDays   int          `json:"cleared_days"`
+	SuccessRate   int          `json:"success_rate"`
+	TotalAttempts int          `json:"total_attempts"`
+	DaySummaries  []DaySummary `json:"day_summaries"`
+	ShareText     string       `json:"share_text"`
 }
 
 // Store handles SQLite operations.
@@ -113,6 +134,7 @@ func (s *Store) migrate() error {
 		container TEXT NOT NULL,
 		attempt INTEGER NOT NULL DEFAULT 1,
 		status TEXT NOT NULL,
+		emoji_row TEXT NOT NULL DEFAULT '',
 		audit_results TEXT NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -134,7 +156,6 @@ func (s *Store) seedDay1() error {
 		}
 	}
 
-	// Starter Manifests: 3 contraband items
 	var mCount int
 	err = s.db.QueryRow(`SELECT COUNT(*) FROM manifests`).Scan(&mCount)
 	if err != nil {
@@ -180,7 +201,6 @@ func (s *Store) seedDay1() error {
 		}
 	}
 
-	// Starter 4-word Signpost Laws
 	var lCount int
 	err = s.db.QueryRow(`SELECT COUNT(*) FROM laws`).Scan(&lCount)
 	if err != nil {
@@ -213,7 +233,7 @@ func (s *Store) GetCurrentDay() (int, error) {
 	return day, nil
 }
 
-// GetAttemptCount returns current attempt number (1-5).
+// GetAttemptCount returns current attempt number (1-3).
 func (s *Store) GetAttemptCount() (int, error) {
 	var attempt int
 	err := s.db.QueryRow(`SELECT attempt_count FROM game_state WHERE id = 1`).Scan(&attempt)
@@ -226,7 +246,7 @@ func (s *Store) GetAttemptCount() (int, error) {
 	return attempt, nil
 }
 
-// IncrementAttempt increments attempt number up to 5.
+// IncrementAttempt increments attempt number up to 3.
 func (s *Store) IncrementAttempt() (int, error) {
 	att, _ := s.GetAttemptCount()
 	att++
@@ -337,14 +357,135 @@ func (s *Store) SaveDeclaration(manifestID string, day int, d rules.Disguise, at
 	auditJSON, _ := json.Marshal(verdict.Audits)
 
 	_, err := s.db.Exec(
-		`INSERT INTO declarations (manifest_id, day, adjective, container, attempt, status, audit_results, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		manifestID, day, d.Adjective, d.Container, attempt, verdict.Status, string(auditJSON), time.Now(),
+		`INSERT INTO declarations (manifest_id, day, adjective, container, attempt, status, emoji_row, audit_results, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		manifestID, day, d.Adjective, d.Container, attempt, verdict.Status, verdict.EmojiRow, string(auditJSON), time.Now(),
 	)
 	return err
 }
 
-// AdvanceToNextDay increments day, resets attempt count, and generates new day parcels if needed.
+// GetDeclarationsForDay retrieves declarations for a manifest on a given day.
+func (s *Store) GetDeclarationsForDay(manifestID string, day int) ([]DeclarationRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT d.id, d.manifest_id, COALESCE(m.name, d.manifest_id), d.day, d.adjective, d.container, d.attempt, d.status, d.emoji_row, d.audit_results, d.created_at
+		 FROM declarations d
+		 LEFT JOIN manifests m ON d.manifest_id = m.id
+		 WHERE d.manifest_id = ? AND d.day = ?
+		 ORDER BY d.attempt ASC, d.id ASC`,
+		manifestID, day,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []DeclarationRecord
+	for rows.Next() {
+		var r DeclarationRecord
+		var auditJSON string
+		if err := rows.Scan(
+			&r.ID, &r.ManifestID, &r.ManifestName, &r.Day, &r.Adjective, &r.Container, &r.Attempt, &r.Status, &r.EmojiRow, &auditJSON, &r.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal([]byte(auditJSON), &r.AuditResults)
+		records = append(records, r)
+	}
+	return records, nil
+}
+
+// GetWeeklyDebrief aggregates the week's customs attempts.
+func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
+	rows, err := s.db.Query(
+		`SELECT d.day, d.manifest_id, COALESCE(m.name, d.manifest_id), d.adjective, d.container, d.attempt, d.status, d.emoji_row
+		 FROM declarations d
+		 LEFT JOIN manifests m ON d.manifest_id = m.id
+		 ORDER BY d.day ASC, d.attempt ASC`,
+	)
+	if err != nil {
+		return WeeklyDebrief{}, err
+	}
+	defer rows.Close()
+
+	dayMap := make(map[int]*DaySummary)
+	dayOrder := make([]int, 0)
+	totalAttempts := 0
+
+	for rows.Next() {
+		var day, attempt int
+		var mID, mName, adj, cnt, status, emojiRow string
+		if err := rows.Scan(&day, &mID, &mName, &adj, &cnt, &attempt, &status, &emojiRow); err != nil {
+			continue
+		}
+
+		totalAttempts++
+		summary, exists := dayMap[day]
+		if !exists {
+			summary = &DaySummary{
+				Day:          day,
+				ManifestName: mName,
+				Attempts:     make([]string, 0),
+			}
+			dayMap[day] = summary
+			dayOrder = append(dayOrder, day)
+		}
+
+		line := fmt.Sprintf("%s (%s + %s)", emojiRow, adj, cnt)
+		summary.Attempts = append(summary.Attempts, line)
+		summary.AttemptsUsed = attempt
+
+		if status == "CLEARED" {
+			summary.Cleared = true
+			summary.WinningPath = fmt.Sprintf("%s in %s", adj, cnt)
+		}
+	}
+
+	clearedCount := 0
+	summaries := make([]DaySummary, 0, len(dayOrder))
+	for _, day := range dayOrder {
+		ds := *dayMap[day]
+		if ds.Cleared {
+			clearedCount++
+		}
+		summaries = append(summaries, ds)
+	}
+
+	totalDays := len(summaries)
+	if totalDays == 0 {
+		totalDays = 1
+	}
+	rate := (clearedCount * 100) / totalDays
+
+	// Format shareable text card
+	shareText := fmt.Sprintf("PRECEDENT Weekly Customs Debrief 📑\n")
+	shareText += fmt.Sprintf("Success Rate: %d/%d Days Cleared (%d%%)\n\n", clearedCount, totalDays, rate)
+	for _, ds := range summaries {
+		statusMark := "❌"
+		if ds.Cleared {
+			statusMark = "✅"
+		}
+		shareText += fmt.Sprintf("Day %d %s [%d/3 tries]: %s\n", ds.Day, statusMark, ds.AttemptsUsed, ds.ManifestName)
+		if ds.Cleared {
+			shareText += fmt.Sprintf("  ↳ Slipped past as: %s\n", ds.WinningPath)
+		}
+		for _, att := range ds.Attempts {
+			shareText += fmt.Sprintf("  %s\n", att)
+		}
+		shareText += "\n"
+	}
+	shareText += "Smuggle your cargo past the codex at: https://github.com/jacobh0521/precedent"
+
+	return WeeklyDebrief{
+		TotalDays:     totalDays,
+		ClearedDays:   clearedCount,
+		SuccessRate:   rate,
+		TotalAttempts: totalAttempts,
+		DaySummaries:  summaries,
+		ShareText:     shareText,
+	}, nil
+}
+
+// AdvanceToNextDay increments day and resets attempts.
 func (s *Store) AdvanceToNextDay() (int, error) {
 	currentDay, err := s.GetCurrentDay()
 	if err != nil {
