@@ -1,0 +1,14 @@
+{{define "lawbook"}}
+<div class="space-y-2">
+    {{range .}}
+    <div class="p-3 rounded-lg border font-mono text-xs flex items-center justify-between
+        {{if gt .Day 1}} bg-amber-950/40 border-amber-500/70 text-amber-200 {{else}} bg-stone-900 border-stone-800 text-stone-200 {{end}}">
+        <span class="font-black text-sm tracking-wide uppercase">{{.Signpost}}</span>
+        <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded
+            {{if gt .Day 1}} bg-amber-500 text-stone-950 {{else}} bg-stone-800 text-stone-400 {{end}}">
+            Day {{.Day}}
+        </span>
+    </div>
+    {{end}}
+</div>
+{{end}}

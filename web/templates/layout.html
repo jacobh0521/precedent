@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-stone-950 text-stone-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PRECEDENT // Orbital Customs Checkpoint</title>
+    <!-- Tailwind CSS (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX (CDN) -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        manila: {
+                            100: '#f7f2e7',
+                            200: '#eee3cd',
+                            300: '#e3cfab',
+                            400: '#d7b884',
+                            500: '#c59d5e',
+                            600: '#ab7e47',
+                            700: '#8c6038',
+                        },
+                        bureau: {
+                            base: '#111315',
+                            card: '#1a1d21',
+                            border: '#2e353d',
+                            green: '#10b981',
+                            red: '#ef4444',
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Courier New', 'Courier', 'monospace'],
+                        sans: ['system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .stamp-cleared {
+            border: 4px double #10b981;
+            color: #10b981;
+            transform: rotate(-3deg);
+            text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+            box-shadow: inset 0 0 15px rgba(16, 185, 129, 0.2);
+        }
+        .stamp-confiscated {
+            border: 4px double #ef4444;
+            color: #ef4444;
+            transform: rotate(3deg);
+            text-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+            box-shadow: inset 0 0 15px rgba(239, 68, 68, 0.2);
+        }
+        .rule-light-green {
+            background-color: rgba(6, 78, 59, 0.6);
+            border-color: #10b981;
+            color: #34d399;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+        }
+        .rule-light-red {
+            background-color: rgba(127, 29, 29, 0.6);
+            border-color: #ef4444;
+            color: #f87171;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.25);
+        }
+        .rule-light-neutral {
+            background-color: rgba(30, 41, 59, 0.5);
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+        .desk-grid {
+            background-color: #111315;
+            background-image: radial-gradient(#262c33 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans desk-grid text-stone-100">
+
+    <!-- Top Status Bar -->
+    <header class="border-b border-bureau-border bg-bureau-base px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="font-mono text-sm tracking-widest font-black uppercase text-manila-200">
+                PRECEDENT // CUSTOMS CHECKPOINT
+            </span>
+        </div>
+
+        <div class="flex items-center space-x-3 font-mono text-xs">
+            <div class="px-3 py-1 bg-stone-900 border border-stone-700 rounded text-manila-300">
+                CYCLE: <span class="font-bold text-amber-400">DAY {{.CurrentDay}}</span>
+            </div>
+            
+            <form hx-post="/dev/next-day" hx-swap="none" class="inline">
+                <button type="submit" class="px-2.5 py-1 rounded bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold transition">
+                    ⚡ Next Day
+                </button>
+            </form>
+
+            <form hx-post="/dev/reset" hx-swap="none" class="inline">
+                <button type="submit" class="px-2 py-1 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 text-xs transition border border-stone-700">
+                    ↺ Reset
+                </button>
+            </form>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 overflow-y-auto">
+        {{template "desk" .}}
+    </main>
+
+</body>
+</html>

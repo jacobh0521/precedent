@@ -1,0 +1,94 @@
+<!-- Main Verdict Notification -->
+<div class="rounded-xl border p-6 shadow-2xl space-y-5 transition-all duration-300
+    {{if .Verdict.Passed}} bg-emerald-950/40 border-emerald-500/70 {{else}} bg-rose-950/40 border-rose-500/70 {{end}}">
+
+    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-stone-800 pb-5">
+        <div>
+            <span class="text-xs font-mono uppercase tracking-widest text-stone-400 font-bold block">
+                AUDIT VERDICT // TRY {{.Verdict.Attempt}} OF 5
+            </span>
+            <h3 class="text-2xl font-black font-mono text-manila-100 uppercase">
+                {{.Disguise.Adjective}} {{.Manifest.Name}} in {{.Disguise.Container}}
+            </h3>
+        </div>
+
+        <!-- Big Bold Stamp -->
+        <div class="px-8 py-3 uppercase font-mono font-black text-3xl tracking-widest rounded select-none
+            {{if .Verdict.Passed}} stamp-cleared bg-emerald-950/80 {{else}} stamp-confiscated bg-rose-950/80 {{end}}">
+            {{.Verdict.Status}}
+        </div>
+    </div>
+
+    <!-- CLEARED: Punchline Law Added! -->
+    {{if and .Verdict.Passed .Verdict.Punchline}}
+    <div class="p-5 rounded-xl bg-amber-950/80 border-2 border-amber-500 text-stone-100 shadow-xl space-y-3">
+        <div class="flex items-center justify-between">
+            <span class="font-mono text-xs uppercase tracking-widest font-black text-amber-300">
+                ⚠️ LOOPHOLE CAUGHT // NEW STATUTE CODIFIED
+            </span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500 text-stone-950 uppercase">
+                Day {{.Verdict.Punchline.Day}} Law
+            </span>
+        </div>
+
+        <div class="bg-stone-950/85 p-4 rounded-lg border border-amber-600/50 text-center">
+            <span class="text-xs font-mono text-stone-400 block mb-1">Tomorrow's Ruleboard Adds:</span>
+            <span class="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-wide block uppercase">
+                {{.Verdict.Punchline.Signpost}}
+            </span>
+        </div>
+
+        <div class="flex justify-end pt-1">
+            <form hx-post="/dev/next-day" hx-swap="none" class="inline">
+                <button type="submit" class="px-5 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 font-mono text-xs font-black uppercase tracking-wider transition shadow-md">
+                    ⚡ Advance to Tomorrow (Face New Law)
+                </button>
+            </form>
+        </div>
+    </div>
+    {{end}}
+
+    <!-- CONFISCATED & Out of Tries Alert -->
+    {{if .OutOfTries}}
+    <div class="p-5 rounded-xl bg-rose-950/80 border-2 border-rose-600 text-stone-100 shadow-xl space-y-3">
+        <div class="flex items-center space-x-2">
+            <span class="text-xl">🚫</span>
+            <span class="font-mono text-xs uppercase tracking-widest font-black text-rose-300">
+                ALL 5 ATTEMPTS EXHAUSTED // CONTRABAND SEIZED
+            </span>
+        </div>
+        <p class="text-xs text-stone-300 font-sans">
+            You've been caught 5 times by station customs. The manifest is locked. Reset your attempts to try a different combination!
+        </p>
+        <div class="pt-1">
+            <form hx-post="/retry" hx-swap="none" class="inline">
+                <button type="submit" class="px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-stone-100 font-mono text-xs font-bold uppercase tracking-wider transition shadow-md">
+                    ↺ Retry 5 Attempts
+                </button>
+            </form>
+        </div>
+    </div>
+    {{else if not .Verdict.Passed}}
+    <div class="text-xs font-mono text-rose-400 flex items-center justify-between">
+        <span>Check the flashing red lights above to see which rule caught you!</span>
+        <span class="font-bold">{{sub 5 .Verdict.Attempt}} tries remaining</span>
+    </div>
+    {{end}}
+
+</div>
+
+<!-- Out-Of-Band Swap: Updates the rule lights board with green / red lights! -->
+<div id="rule-board" hx-swap-oob="innerHTML">
+    {{range .Verdict.Audits}}
+    <div class="border rounded-lg p-3 text-center transition-all duration-300 flex flex-col justify-center items-center h-20 shadow-sm
+        {{if .Passed}} rule-light-green {{else}} rule-light-red animate-bounce {{end}}">
+        <span class="font-mono font-black text-sm tracking-wide uppercase leading-tight">
+            {{.Signpost}}
+        </span>
+        <span class="text-[10px] font-mono font-black mt-1 uppercase tracking-wider
+            {{if .Passed}} text-emerald-300 {{else}} text-rose-300 {{end}}">
+            {{if .Passed}}✓ SLIPPED PAST{{else}}✗ BUSTED{{end}}
+        </span>
+    </div>
+    {{end}}
+</div>

@@ -1,0 +1,191 @@
+{{define "desk"}}
+<div class="max-w-4xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- 1. Parcel Selector Tabs -->
+    <div class="flex items-center justify-center space-x-2">
+        {{range .Manifests}}
+        <a href="/select-manifest?manifest_id={{.ID}}"
+           class="px-4 py-2 rounded-full font-mono text-xs font-bold transition flex items-center space-x-2 border
+           {{if eq .ID $.SelectedManifest.ID}}
+               bg-amber-500 text-stone-950 border-amber-400 shadow-md scale-105
+           {{else}}
+               bg-stone-900 text-stone-400 border-stone-800 hover:border-stone-600
+           {{end}}">
+            <span>📦</span>
+            <span>{{.Name}}</span>
+        </a>
+        {{end}}
+    </div>
+
+    <!-- 2. Big Centered Contraband -->
+    <div class="text-center space-y-2 py-4">
+        <span class="text-xs font-mono tracking-widest uppercase text-amber-500 font-bold block">
+            TODAY'S CONTRABAND TO SMUGGLE
+        </span>
+        <h1 class="text-4xl sm:text-5xl font-black font-mono tracking-tight text-manila-100 uppercase">
+            {{.SelectedManifest.Name}}
+        </h1>
+        <p class="text-sm font-sans text-stone-300 max-w-lg mx-auto">
+            {{.SelectedManifest.Description}}
+        </p>
+        <p class="text-xs font-mono text-stone-500 italic">
+            "{{.SelectedManifest.FlavorText}}"
+        </p>
+    </div>
+
+    <!-- 3. Wordle-Style Rule Lights Board -->
+    <div class="bg-bureau-card border border-bureau-border rounded-xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-bureau-border pb-3">
+            <div class="flex items-center space-x-2">
+                <span class="text-xs font-mono uppercase tracking-wider text-stone-400 font-bold">
+                    CHECKPOINT RULE SIGNPOSTS
+                </span>
+            </div>
+            
+            <!-- Attempt Indicator Pips -->
+            <div class="flex items-center space-x-1.5 font-mono text-xs">
+                <span class="text-stone-400 mr-2">TRIES:</span>
+                {{range $i := seq 5}}
+                <span class="w-3.5 h-3.5 rounded-full border transition flex items-center justify-center text-[9px] font-bold
+                    {{if lt $i $.AttemptCount}}
+                        bg-rose-500 border-rose-400 text-stone-950
+                    {{else if eq $i $.AttemptCount}}
+                        bg-amber-400 border-amber-300 text-stone-950 animate-pulse
+                    {{else}}
+                        bg-stone-800 border-stone-700 text-stone-500
+                    {{end}}">
+                </span>
+                {{end}}
+                <span class="text-stone-400 ml-1.5">({{.AttemptCount}}/5)</span>
+            </div>
+        </div>
+
+        <!-- The 4-Word Signpost Badges -->
+        <div id="rule-board" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {{range .ActiveLaws}}
+            <div class="rule-light-neutral border rounded-lg p-3 text-center transition-all duration-300 flex flex-col justify-center items-center h-20 shadow-sm
+                {{if gt .Day 1}} border-amber-600/70 bg-amber-950/20 {{end}}">
+                <span class="font-mono font-black text-sm tracking-wide uppercase leading-tight">
+                    {{.Signpost}}
+                </span>
+                {{if gt .Day 1}}
+                <span class="text-[10px] font-mono text-amber-400 font-bold mt-1 uppercase tracking-widest">
+                    ⚡ NEW COMPILED LAW
+                </span>
+                {{else}}
+                <span class="text-[10px] font-mono text-stone-400 font-semibold mt-1">
+                    STANDBY
+                </span>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+
+    <!-- 4. 2-Click Disguise Tray -->
+    <div class="bg-bureau-card border border-bureau-border rounded-xl p-6 shadow-xl space-y-6">
+        <form hx-post="/declare" hx-target="#verdict-area" hx-swap="innerHTML" class="space-y-6">
+            <input type="hidden" name="manifest_id" value="{{.SelectedManifest.ID}}">
+            <input type="hidden" id="adjective-input" name="adjective" value="">
+            <input type="hidden" id="container-input" name="container" value="">
+
+            <!-- Step 1: Pick Adjective -->
+            <div>
+                <div class="flex items-center justify-between mb-2.5">
+                    <span class="font-mono text-xs uppercase font-bold text-manila-300 tracking-wider">
+                        1. PICK AN ADJECTIVE:
+                    </span>
+                    <span id="adj-selected-label" class="text-xs font-mono text-stone-400 italic">None selected</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    {{range .AdjectiveChips}}
+                    <button type="button" 
+                            onclick="selectChip('adj', '{{.}}', this)"
+                            class="adj-chip px-3.5 py-2 rounded-lg font-mono text-xs font-bold border border-stone-700 bg-stone-900/80 text-stone-300 hover:border-amber-400 hover:text-stone-100 transition">
+                        {{.}}
+                    </button>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Step 2: Pick Container -->
+            <div>
+                <div class="flex items-center justify-between mb-2.5">
+                    <span class="font-mono text-xs uppercase font-bold text-manila-300 tracking-wider">
+                        2. PICK A CONTAINER:
+                    </span>
+                    <span id="cnt-selected-label" class="text-xs font-mono text-stone-400 italic">None selected</span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    {{range .ContainerChips}}
+                    <button type="button" 
+                            onclick="selectChip('cnt', '{{.}}', this)"
+                            class="cnt-chip px-3.5 py-2 rounded-lg font-mono text-xs font-bold border border-stone-700 bg-stone-900/80 text-stone-300 hover:border-amber-400 hover:text-stone-100 transition">
+                        {{.}}
+                    </button>
+                    {{end}}
+                </div>
+            </div>
+
+            <!-- Big STAMP Button -->
+            <div class="pt-2">
+                <button type="submit" 
+                        id="stamp-button"
+                        disabled
+                        class="w-full py-4 rounded-xl font-mono text-lg font-black tracking-widest uppercase transition shadow-2xl flex items-center justify-center space-x-3
+                               bg-stone-800 text-stone-500 cursor-not-allowed">
+                    <span>🔏</span>
+                    <span id="stamp-button-text">PICK 1 ADJECTIVE + 1 CONTAINER</span>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 5. Wordle Feedback & Stamp Target Area -->
+    <div id="verdict-area">
+        <!-- Rendered dynamically by HTMX -->
+    </div>
+
+</div>
+
+<!-- Client-side chip selection logic -->
+<script>
+    let selectedAdj = "";
+    let selectedCnt = "";
+
+    function selectChip(type, val, btn) {
+        if (type === 'adj') {
+            document.querySelectorAll('.adj-chip').forEach(b => {
+                b.classList.remove('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
+                b.classList.add('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
+            });
+            btn.classList.add('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
+            btn.classList.remove('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
+            selectedAdj = val;
+            document.getElementById('adjective-input').value = val;
+            document.getElementById('adj-selected-label').innerText = val;
+            document.getElementById('adj-selected-label').className = "text-xs font-mono text-amber-400 font-bold";
+        } else if (type === 'cnt') {
+            document.querySelectorAll('.cnt-chip').forEach(b => {
+                b.classList.remove('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
+                b.classList.add('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
+            });
+            btn.classList.add('bg-amber-500', 'text-stone-950', 'border-amber-400', 'scale-105');
+            btn.classList.remove('bg-stone-900/80', 'text-stone-300', 'border-stone-700');
+            selectedCnt = val;
+            document.getElementById('container-input').value = val;
+            document.getElementById('cnt-selected-label').innerText = val;
+            document.getElementById('cnt-selected-label').className = "text-xs font-mono text-amber-400 font-bold";
+        }
+
+        const stampBtn = document.getElementById('stamp-button');
+        const stampText = document.getElementById('stamp-button-text');
+
+        if (selectedAdj && selectedCnt) {
+            stampBtn.disabled = false;
+            stampBtn.className = "w-full py-4 rounded-xl font-mono text-xl font-black tracking-widest uppercase transition shadow-2xl flex items-center justify-center space-x-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 cursor-pointer scale-100 hover:scale-[1.01]";
+            stampText.innerText = `STAMP: ${selectedAdj.toUpperCase()} IN ${selectedCnt.toUpperCase()}`;
+        }
+    }
+</script>
+{{end}}
