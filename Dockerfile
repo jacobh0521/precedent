@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for Cloud Run (zero CGO / pure-Go SQLite)
-FROM golang:1.24-alpine AS builder
+FROM golang:alpine AS builder
 
 WORKDIR /src
 
