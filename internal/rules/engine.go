@@ -346,6 +346,51 @@ func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
 	return []Law{law1, law2}
 }
 
+// FormatDisguiseSentence builds a grammatically correct sentence describing the smuggling attempt.
+// e.g. "Metaphorical Live Giraffe in an Envelope", "Inflatable Live Giraffe in a Plastic Bag"
+func FormatDisguiseSentence(adj, cargoName, container string) string {
+	cleanCargo := strings.TrimSpace(cargoName)
+	upper := strings.ToUpper(cleanCargo)
+	if strings.HasPrefix(upper, "A ") {
+		cleanCargo = strings.TrimSpace(cleanCargo[2:])
+	} else if strings.HasPrefix(upper, "AN ") {
+		cleanCargo = strings.TrimSpace(cleanCargo[3:])
+	} else if strings.HasPrefix(upper, "THE ") {
+		cleanCargo = strings.TrimSpace(cleanCargo[4:])
+	}
+
+	cleanAdj := strings.TrimSpace(adj)
+	var subject string
+	if cleanAdj != "" && !strings.EqualFold(cleanAdj, "Unmodified") {
+		subject = fmt.Sprintf("%s %s", cleanAdj, cleanCargo)
+	} else {
+		subject = cleanCargo
+	}
+
+	cleanCnt := strings.TrimSpace(container)
+	var containerPhrase string
+	if cleanCnt != "" {
+		cntLower := strings.ToLower(cleanCnt)
+		if strings.HasPrefix(cntLower, "in ") || strings.HasPrefix(cntLower, "with ") {
+			containerPhrase = cleanCnt
+		} else if strings.EqualFold(cleanCnt, "bare hands") {
+			containerPhrase = "with bare hands"
+		} else {
+			article := "a"
+			firstChar := strings.ToLower(string(cleanCnt[0]))
+			if strings.Contains("aeiou", firstChar) {
+				article = "an"
+			}
+			containerPhrase = fmt.Sprintf("in %s %s", article, cleanCnt)
+		}
+	}
+
+	if containerPhrase != "" {
+		return fmt.Sprintf("%s %s", subject, containerPhrase)
+	}
+	return subject
+}
+
 func formatContainerSignpost(cnt string) string {
 	upper := strings.ToUpper(strings.TrimSpace(cnt))
 	if len(upper) == 0 {

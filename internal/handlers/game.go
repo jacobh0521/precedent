@@ -30,13 +30,14 @@ type DeskViewData struct {
 
 // VerdictPartialData holds data passed to verdict.html.
 type VerdictPartialData struct {
-	Verdict        rules.AuditVerdict
-	Manifest       db.Manifest
-	Disguise       rules.Disguise
-	ActiveLaws     []rules.Law
-	CurrentDay     int
-	OutOfTries     bool
-	DailyShareText string
+	Verdict          rules.AuditVerdict
+	Manifest         db.Manifest
+	Disguise         rules.Disguise
+	DisguiseSentence string
+	ActiveLaws       []rules.Law
+	CurrentDay       int
+	OutOfTries       bool
+	DailyShareText   string
 }
 
 // NewGameHandler initializes handler with template parsing.
@@ -150,15 +151,17 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	// Fetch all attempts today for this manifest to construct the Wordle-like share text
 	records, _ := h.store.GetDeclarationsForDay(currentDay)
 	shareText := formatDailyShare(currentDay, manifest.Name, verdict.Passed, attemptCount, records, verdict.CompiledLaws)
+	sentence := rules.FormatDisguiseSentence(disguise.Adjective, manifest.Name, disguise.Container)
 
 	partialData := VerdictPartialData{
-		Verdict:        verdict,
-		Manifest:       manifest,
-		Disguise:       disguise,
-		ActiveLaws:     updatedLaws,
-		CurrentDay:     currentDay,
-		OutOfTries:     outOfTries,
-		DailyShareText: shareText,
+		Verdict:          verdict,
+		Manifest:         manifest,
+		Disguise:         disguise,
+		DisguiseSentence: sentence,
+		ActiveLaws:       updatedLaws,
+		CurrentDay:       currentDay,
+		OutOfTries:       outOfTries,
+		DailyShareText:   shareText,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -181,7 +184,8 @@ func formatDailyShare(day int, cargoName string, cleared bool, attempts int, rec
 	sb.WriteString(fmt.Sprintf("Contraband: %s\n\n", cargoName))
 
 	for i, rec := range records {
-		sb.WriteString(fmt.Sprintf("Guess %d/3: %s (%s + %s)\n", i+1, rec.EmojiRow, rec.Adjective, rec.Container))
+		guessSentence := rules.FormatDisguiseSentence(rec.Adjective, cargoName, rec.Container)
+		sb.WriteString(fmt.Sprintf("Guess %d/3: %s (%s)\n", i+1, rec.EmojiRow, guessSentence))
 	}
 
 	if len(compiledLaws) > 0 {

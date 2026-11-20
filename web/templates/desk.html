@@ -126,9 +126,18 @@
         const adj = document.getElementById('adjective-input').value.trim();
         const cnt = document.getElementById('container-input').value.trim();
         const stampText = document.getElementById('stamp-button-text');
+        const rawCargo = "{{.TodayManifest.Name}}";
+        const cleanCargo = rawCargo.replace(/^(A |AN |THE )/i, "");
 
         if (adj && cnt) {
-            stampText.innerText = `STAMP: ${adj.toUpperCase()} IN ${cnt.toUpperCase()}`;
+            let article = /^[aeiou]/i.test(cnt) ? "AN" : "A";
+            if (/^bare hands/i.test(cnt)) {
+                stampText.innerText = `STAMP: ${adj.toUpperCase()} ${cleanCargo.toUpperCase()} WITH BARE HANDS`;
+            } else if (/^(in |with )/i.test(cnt)) {
+                stampText.innerText = `STAMP: ${adj.toUpperCase()} ${cleanCargo.toUpperCase()} ${cnt.toUpperCase()}`;
+            } else {
+                stampText.innerText = `STAMP: ${adj.toUpperCase()} ${cleanCargo.toUpperCase()} IN ${article} ${cnt.toUpperCase()}`;
+            }
         } else {
             stampText.innerText = "STAMP DECLARATION";
         }

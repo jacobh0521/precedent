@@ -145,3 +145,25 @@ func TestFairCargoEvaluation(t *testing.T) {
 		t.Fatalf("expected Taxidermied in Matchbox to pass: %+v", vTaxi.Audits)
 	}
 }
+
+func TestFormatDisguiseSentenceGrammar(t *testing.T) {
+	cases := []struct {
+		adj       string
+		cargo     string
+		container string
+		expected  string
+	}{
+		{"Metaphorical", "A Live Giraffe", "Envelope", "Metaphorical Live Giraffe in an Envelope"},
+		{"Inflatable", "A Live Giraffe", "Plastic Bag", "Inflatable Live Giraffe in a Plastic Bag"},
+		{"Dehydrated", "Tomorrow's Weather", "Pocket", "Dehydrated Tomorrow's Weather in a Pocket"},
+		{"Taxidermied", "An Angry Goose", "Matchbox", "Taxidermied Angry Goose in a Matchbox"},
+		{"Unmodified", "A Live Giraffe", "Bare Hands", "Live Giraffe with bare hands"},
+	}
+
+	for _, tc := range cases {
+		actual := FormatDisguiseSentence(tc.adj, tc.cargo, tc.container)
+		if actual != tc.expected {
+			t.Errorf("FormatDisguiseSentence(%q, %q, %q) = %q; expected %q", tc.adj, tc.cargo, tc.container, actual, tc.expected)
+		}
+	}
+}
