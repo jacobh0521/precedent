@@ -5,6 +5,7 @@ import (
 )
 
 // CuratedIconicCargo contains the opening iconic daily items.
+// Kept strictly fair: 1-2 traits max per item so player can logically counter with Adjective + Container.
 var CuratedIconicCargo = []Manifest{
 	{
 		ID:          "cargo-day-1",
@@ -98,7 +99,7 @@ var CuratedIconicCargo = []Manifest{
 		ID:          "cargo-day-12",
 		Day:         12,
 		Name:        "A BLUE WHALE CALF",
-		Traits:      []string{"living", "wet", "oversized"},
+		Traits:      []string{"living", "oversized"},
 		Description: "Twenty tons of mammalian marine royalty looking for krill.",
 		FlavorText:  "Echolocating loudly into customs intercom.",
 	},
@@ -136,7 +137,7 @@ var (
 		Desc   string
 		Flavor string
 	}{
-		{"OCTOPUS", []string{"living", "wet", "oversized"}, "Eight tentacled cephalopod picking customs locks.", "Currently wearing a fake passport."},
+		{"OCTOPUS", []string{"living", "oversized"}, "Eight tentacled cephalopod picking customs locks.", "Currently wearing a fake passport."},
 		{"GRIZZLY BEAR", []string{"living", "oversized"}, "A 900-pound apex predator in transit.", "Smells like salmon and territorial hostility."},
 		{"GEYSER", []string{"wet", "oversized"}, "Pressurized boiling geothermal water fountain.", "Erupts every 4 minutes on the dot."},
 		{"SWARM OF BEES", []string{"living", "oversized"}, "50,000 angry pollinators inside a burlap sac.", "Customs officers standing very, very still."},
@@ -145,7 +146,7 @@ var (
 		{"RAINCLOUD", []string{"wet", "oversized"}, "Localized precipitation cell following individual travelers.", "Drizzling melancholy on the scanner."},
 		{"MOOSE", []string{"living", "oversized"}, "Six-foot antlered forest monarch with no ticket.", "Chewing on customs declaration paperwork."},
 		{"SOUP TSUNAMI", []string{"wet", "oversized"}, "Five thousand gallons of bubbling chicken noodle broth.", "Requires emergency customs crackers."},
-		{"HIPPOPOTAMUS", []string{"living", "wet", "oversized"}, "Two-ton aquatic territory defender with bad attitude.", "Submerged in the terminal drinking fountain."},
+		{"HIPPOPOTAMUS", []string{"living", "oversized"}, "Two-ton aquatic territory defender with bad attitude.", "Submerged in the terminal drinking fountain."},
 		{"TORNADO", []string{"oversized"}, "F5 vortex of spinning debris and cosmic dust.", "Currently rearranging the duty-free shop."},
 		{"GIANT PANDA", []string{"living", "oversized"}, "Bamboo-obsessed bear refusing to leave terminal floor.", "Declared by consignee as 'heavy throw pillow'."},
 		{"BREWERY VAT", []string{"wet", "oversized"}, "Overflowing wooden reservoir of fermented dwarven ale.", "Customs agents suddenly volunteering for inspection."},
@@ -155,7 +156,7 @@ var (
 		{"KELP FOREST", []string{"wet", "oversized"}, "Dense tangled marine grove teeming with bioluminescent crabs.", "Leaking ocean brine across terminal C."},
 		{"FLAMINGO FLOCK", []string{"living", "oversized"}, "Sixty bright pink wading birds standing on one leg.", "Refusing to provide customs fingerprints."},
 		{"SWAMP", []string{"wet", "oversized"}, "One acre of humid boggy peat and croaking toads.", "Mud stains on station carpet are permanent."},
-		{"WALRUS", []string{"living", "wet", "oversized"}, "Tusked blubber colossus taking a nap on terminal scale.", "Weight capacity severely exceeded."},
+		{"WALRUS", []string{"living", "oversized"}, "Tusked blubber colossus taking a nap on terminal scale.", "Weight capacity severely exceeded."},
 	}
 )
 

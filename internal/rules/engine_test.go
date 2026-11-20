@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestSignpostRules_GiraffeSmuggling(t *testing.T) {
+func TestMetaphoricalWorks_TheoreticalFails(t *testing.T) {
 	starterLaws := StarterLaws()
 
 	giraffe := Cargo{
@@ -13,31 +13,49 @@ func TestSignpostRules_GiraffeSmuggling(t *testing.T) {
 		Traits: []string{"living", "oversized"},
 	}
 
-	// Try 1: Unmodified in a Glass Jar -> Should fail NO LIVING THINGS and NO GLASS
-	badDisguise1 := Disguise{
-		Adjective: "Rental",
-		Container: "Glass Jar",
+	// 1. "Theoretical" DOES NOT work!
+	theoreticalDisguise := Disguise{
+		Adjective: "Theoretical",
+		Container: "Envelope",
 	}
-	verdict1 := Evaluate(starterLaws, giraffe, badDisguise1, 1)
-	if verdict1.Passed {
-		t.Fatalf("expected bad disguise 1 to be confiscated")
+	verdictTheo := Evaluate(starterLaws, giraffe, theoreticalDisguise, 1)
+	if verdictTheo.Passed {
+		t.Fatalf("expected Theoretical to FAIL, but it passed!")
 	}
 
-	// Try 2: User enters "Metaphorical" in "Envelope" -> Should CLEAR all 5!
-	winningDisguise := Disguise{
+	// Verify Theoretical specifically fails NO LIVING THINGS
+	foundLivingFail := false
+	for _, a := range verdictTheo.Audits {
+		if a.Signpost == "NO LIVING THINGS" && !a.Passed {
+			foundLivingFail = true
+		}
+	}
+	if !foundLivingFail {
+		t.Errorf("expected Theoretical Giraffe to be BUSTED under NO LIVING THINGS")
+	}
+
+	// 2. "Metaphorical" WORKS as get-out-of-jail card
+	metaDisguise := Disguise{
 		Adjective: "Metaphorical",
 		Container: "Envelope",
 	}
-	verdict2 := Evaluate(starterLaws, giraffe, winningDisguise, 2)
-	if !verdict2.Passed {
-		t.Fatalf("expected Metaphorical in Envelope to clear all rules! audits: %+v", verdict2.Audits)
+	verdictMeta := Evaluate(starterLaws, giraffe, metaDisguise, 2)
+	if !verdictMeta.Passed {
+		t.Fatalf("expected Metaphorical in Envelope to CLEAR, but failed: %+v", verdictMeta.Audits)
 	}
-	if verdict2.EmojiRow != "🟩🟩🟩🟩🟩" {
-		t.Fatalf("expected emoji row 🟩🟩🟩🟩🟩, got %s", verdict2.EmojiRow)
+
+	// 3. "Imaginary" also works as a synonym on Day 1
+	imaginaryDisguise := Disguise{
+		Adjective: "Imaginary",
+		Container: "Pocket",
+	}
+	verdictImag := Evaluate(starterLaws, giraffe, imaginaryDisguise, 2)
+	if !verdictImag.Passed {
+		t.Fatalf("expected Imaginary in Pocket to CLEAR on Day 1, but failed: %+v", verdictImag.Audits)
 	}
 }
 
-func TestTwoRuleLoopholeCompilation(t *testing.T) {
+func TestMetaphoricalSynonymBlanketBan(t *testing.T) {
 	starterLaws := StarterLaws()
 
 	giraffe := Cargo{
@@ -46,48 +64,84 @@ func TestTwoRuleLoopholeCompilation(t *testing.T) {
 		Traits: []string{"living", "oversized"},
 	}
 
+	// Player clears Day 1 using "Metaphorical" in "Envelope"
 	winningDisguise := Disguise{
 		Adjective: "Metaphorical",
 		Container: "Envelope",
 	}
-
-	// Day 1 clearance generates TWO rules for Day 2:
-	// Rule 1: NOTHING METAPHORICAL
-	// Rule 2: NOTHING IN AN ENVELOPE
 	newLaws := CompileLoopholeRules(2, winningDisguise, len(starterLaws))
+
 	if len(newLaws) != 2 {
 		t.Fatalf("expected 2 new laws, got %d", len(newLaws))
 	}
-	if newLaws[0].Signpost != "NOTHING METAPHORICAL" {
-		t.Fatalf("expected 'NOTHING METAPHORICAL', got '%s'", newLaws[0].Signpost)
+	// Verify that law 1 is the blanket ban on ALL metaphors
+	if newLaws[0].Signpost != "NO METAPHORS OR IMAGINARY CONCEPTS" {
+		t.Fatalf("expected 'NO METAPHORS OR IMAGINARY CONCEPTS', got '%s'", newLaws[0].Signpost)
+	}
+	if newLaws[0].RuleType != "ban_all_metaphors" {
+		t.Fatalf("expected rule_type 'ban_all_metaphors', got '%s'", newLaws[0].RuleType)
 	}
 	if newLaws[1].Signpost != "NOTHING IN AN ENVELOPE" {
 		t.Fatalf("expected 'NOTHING IN AN ENVELOPE', got '%s'", newLaws[1].Signpost)
 	}
 
-	lawbook := append(starterLaws, newLaws...)
-	if len(lawbook) != 7 {
-		t.Fatalf("expected 7 laws in Day 2 lawbook, got %d", len(lawbook))
+	day2Lawbook := append(starterLaws, newLaws...)
+
+	// On Day 2, trying another synonym like "Imaginary" or "Allegorical" or "Fictional" MUST BE BUSTED!
+	synonymsToTest := []string{"Imaginary", "Allegorical", "Symbolic", "Fictional", "Abstract", "Metaphorical"}
+	for _, syn := range synonymsToTest {
+		v := Evaluate(day2Lawbook, giraffe, Disguise{Adjective: syn, Container: "Pocket"}, 1)
+		if v.Passed {
+			t.Fatalf("expected synonym '%s' to be BUSTED on Day 2 by blanket ban, but it passed!", syn)
+		}
+		foundBlanketFail := false
+		for _, a := range v.Audits {
+			if a.Signpost == "NO METAPHORS OR IMAGINARY CONCEPTS" && !a.Passed {
+				foundBlanketFail = true
+			}
+		}
+		if !foundBlanketFail {
+			t.Errorf("expected failure on NO METAPHORS OR IMAGINARY CONCEPTS for synonym '%s'", syn)
+		}
 	}
 
-	// Test Day 2: Trying Metaphorical in Pocket must fail Law #6 (NOTHING METAPHORICAL)
-	day2FailAdj := Evaluate(lawbook, giraffe, Disguise{Adjective: "Metaphorical", Container: "Pocket"}, 1)
-	if day2FailAdj.Passed {
-		t.Fatalf("expected Metaphorical to be BUSTED by Law #6")
+	// But a concrete disguise like "Inflatable" in "Pocket" STILL PASSES!
+	vConcrete := Evaluate(day2Lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Pocket"}, 2)
+	if !vConcrete.Passed {
+		t.Fatalf("expected Inflatable in Pocket to clear Day 2: %+v", vConcrete.Audits)
+	}
+}
+
+func TestFairCargoEvaluation(t *testing.T) {
+	starterLaws := StarterLaws()
+
+	// Contraband with wet trait
+	weather := Cargo{
+		ID:     "cargo-2",
+		Name:   "TOMORROW'S WEATHER",
+		Traits: []string{"wet", "oversized"},
 	}
 
-	// Test Day 2: Trying Inflatable in Envelope must fail Law #7 (NOTHING IN AN ENVELOPE)
-	day2FailCnt := Evaluate(lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Envelope"}, 2)
-	if day2FailCnt.Passed {
-		t.Fatalf("expected Envelope to be BUSTED by Law #7")
+	// Solvable fairly with Dehydrated in Pocket
+	vDehydrated := Evaluate(starterLaws, weather, Disguise{Adjective: "Dehydrated", Container: "Pocket"}, 1)
+	if !vDehydrated.Passed {
+		t.Fatalf("expected Dehydrated in Pocket to pass: %+v", vDehydrated.Audits)
 	}
 
-	// Test Day 2: Trying Inflatable in Pocket clears all 7 laws!
-	day2Success := Evaluate(lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Pocket"}, 3)
-	if !day2Success.Passed {
-		t.Fatalf("expected Inflatable in Pocket to clear all 7 laws! audits: %+v", day2Success.Audits)
+	// Solvable fairly with Ziploc Bag (waterproof container)
+	vZiploc := Evaluate(starterLaws, weather, Disguise{Adjective: "Unmodified", Container: "Ziploc Bag"}, 1)
+	if !vZiploc.Passed {
+		t.Fatalf("expected Ziploc Bag to pass for wet cargo: %+v", vZiploc.Audits)
 	}
-	if day2Success.EmojiRow != "🟩🟩🟩🟩🟩🟩🟩" {
-		t.Fatalf("expected 7 green squares, got %s", day2Success.EmojiRow)
+
+	// Contraband with living trait: solvable with Taxidermied in Matchbox
+	giraffe := Cargo{
+		ID:     "cargo-1",
+		Name:   "A LIVE GIRAFFE",
+		Traits: []string{"living", "oversized"},
+	}
+	vTaxi := Evaluate(starterLaws, giraffe, Disguise{Adjective: "Taxidermied", Container: "Matchbox"}, 1)
+	if !vTaxi.Passed {
+		t.Fatalf("expected Taxidermied in Matchbox to pass: %+v", vTaxi.Audits)
 	}
 }

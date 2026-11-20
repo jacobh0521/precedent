@@ -366,7 +366,7 @@ func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 		if ds.Cleared {
 			statusMark = "✅"
 		}
-		shareText += fmt.Sprintf("Day %d %s [%d/3 tries]: %s\n", ds.Day, statusMark, ds.AttemptsUsed, ds.ManifestName)
+		shareText += fmt.Sprintf("Day %d %s [Guess %d/3]: %s\n", ds.Day, statusMark, ds.AttemptsUsed, ds.ManifestName)
 		if ds.Cleared {
 			shareText += fmt.Sprintf("  ↳ Slipped past as: %s\n", ds.WinningPath)
 		}
@@ -375,7 +375,7 @@ func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 		}
 		shareText += "\n"
 	}
-	shareText += "Smuggle your cargo: https://github.com/jacobh0521/precedent"
+	shareText += "Play Precedent: https://precedent-224653452177.us-central1.run.app"
 
 	return WeeklyDebrief{
 		TotalDays:     totalDays,

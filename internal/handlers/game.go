@@ -177,11 +177,11 @@ func formatDailyShare(day int, cargoName string, cleared bool, attempts int, rec
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("PRECEDENT Day %d %s\n", day, score))
+	sb.WriteString(fmt.Sprintf("PRECEDENT Day %d (%s)\n", day, score))
 	sb.WriteString(fmt.Sprintf("Contraband: %s\n\n", cargoName))
 
-	for _, rec := range records {
-		sb.WriteString(fmt.Sprintf("%s (%s + %s)\n", rec.EmojiRow, rec.Adjective, rec.Container))
+	for i, rec := range records {
+		sb.WriteString(fmt.Sprintf("Guess %d/3: %s (%s + %s)\n", i+1, rec.EmojiRow, rec.Adjective, rec.Container))
 	}
 
 	if len(compiledLaws) > 0 {
@@ -191,7 +191,7 @@ func formatDailyShare(day int, cargoName string, cleared bool, attempts int, rec
 		}
 		sb.WriteString(fmt.Sprintf("\n⚖️ New Laws: %s\n", strings.Join(signposts, " | ")))
 	}
-	sb.WriteString("\nSmuggle your cargo: https://github.com/jacobh0521/precedent")
+	sb.WriteString("\nPlay Precedent: https://precedent-224653452177.us-central1.run.app")
 	return sb.String()
 }
 

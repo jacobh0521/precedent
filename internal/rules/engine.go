@@ -30,11 +30,11 @@ type Disguise struct {
 	Container string `json:"container"` // e.g. "Envelope", "Pocket", "Matchbox"
 }
 
-// Law represents a 4-word signpost rule.
+// Law represents an active checkpoint rule.
 type Law struct {
 	ID          int64     `json:"id"`
 	Day         int       `json:"day"`
-	Signpost    string    `json:"signpost"` // Blunt signpost (e.g. "NOTHING METAPHORICAL", "NOTHING IN AN ENVELOPE")
+	Signpost    string    `json:"signpost"` // Blunt signpost
 	RuleType    string    `json:"rule_type"`
 	TargetAdj   string    `json:"target_adj,omitempty"`
 	TargetCargo string    `json:"target_cargo,omitempty"` // used for target container
@@ -96,15 +96,39 @@ func StarterLaws() []Law {
 	}
 }
 
-// Dictionaries of semantic keywords for open text user entry
+// MetaphoricalSynonyms are "get out of jail free" words.
+// If any is used, ALL are permanently banned for the rest of the run.
+var MetaphoricalSynonyms = []string{
+	"metaphorical", "metaphor", "imaginary", "allegorical", "symbolic",
+	"fictional", "abstract", "spiritual", "figurative", "illusory",
+	"conceptual", "pretend", "hallucinated", "mythical", "phantom",
+	"make-believe", "philosophical", "metaphysical",
+}
+
+// IsMetaphorical checks if an adjective is metaphorical or one of its synonyms.
+// Specifically: "theoretical" explicitly DOES NOT work.
+func IsMetaphorical(adj string) bool {
+	t := strings.ToLower(strings.TrimSpace(adj))
+	if strings.Contains(t, "theoretical") || strings.Contains(t, "theory") {
+		return false
+	}
+	for _, syn := range MetaphoricalSynonyms {
+		if strings.Contains(t, syn) || strings.Contains(syn, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// Dictionaries of semantic keywords for fair evaluation
 var (
 	NonLivingAdjectives = []string{
-		"inflatable", "metaphorical", "robotic", "mechanical", "taxidermied",
+		"inflatable", "robotic", "mechanical", "taxidermied",
 		"plastic", "wooden", "stuffed", "plush", "fake", "artificial",
 		"holographic", "digital", "toy", "ceramic", "replica", "synthetic",
-		"imaginary", "fictional", "balloon", "origami", "painted", "drawn",
-		"ghostly", "spectral", "abstract", "symbolic", "spiritual", "allegorical",
-		"virtual", "decoy", "paper", "cardboard", "porcelain", "plaster",
+		"balloon", "origami", "painted", "drawn", "ghostly", "spectral",
+		"decoy", "paper", "cardboard", "porcelain", "plaster", "fossilized",
+		"freeze-dried", "statue", "dummy", "mannequin", "puppet",
 	}
 
 	GlassKeywords = []string{
@@ -117,21 +141,29 @@ var (
 		"pocket", "envelope", "velvet pouch", "pouch", "wallet", "sock",
 		"thimble", "matchbox", "glove", "baggie", "capsule", "coin purse",
 		"locket", "pillbox", "packet", "folder", "thermos", "ziploc",
-		"sleeve", "sheath", "can", "tin can", "pocketbook",
+		"ziploc bag", "sleeve", "sheath", "can", "tin can", "pocketbook",
+		"plastic bag", "dry bag", "silicone pouch", "wax paper bag",
 	}
 
 	CompressingAdjectives = []string{
 		"folded", "microscopic", "inflatable", "miniature", "tiny", "shrunk",
 		"compressed", "flattened", "pocket-sized", "nano", "subatomic",
-		"compact", "deflated", "metaphorical", "abstract", "digital", "virtual",
-		"origami", "dehydrated", "crushed", "condensed",
+		"compact", "deflated", "origami", "dehydrated", "crushed", "condensed",
+		"paper", "freeze-dried",
 	}
 
 	DryAdjectives = []string{
 		"dehydrated", "dried", "freeze-dried", "frozen", "powdered", "powder",
-		"metaphorical", "evaporated", "baked", "burnt", "toasted", "cured",
-		"smoked", "crystallized", "solidified", "digital", "abstract",
-		"taxidermied", "wooden", "plastic", "paper", "desiccated",
+		"evaporated", "baked", "burnt", "toasted", "cured", "smoked",
+		"crystallized", "solidified", "digital", "taxidermied", "wooden",
+		"plastic", "paper", "desiccated", "inflatable", "ceramic", "plush",
+		"stuffed", "fossilized", "dry",
+	}
+
+	WaterproofContainers = []string{
+		"ziploc", "ziploc bag", "plastic bag", "dry bag", "silicone pouch",
+		"wax paper bag", "sealed pouch", "sealed packet", "capsule", "thermos",
+		"vacuum flask", "vacuum bag",
 	}
 
 	MetalKeywords = []string{
@@ -157,10 +189,17 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 	adj := strings.ToLower(strings.TrimSpace(d.Adjective))
 	cnt := strings.ToLower(strings.TrimSpace(d.Container))
 
+	// "theoretical" explicitly does not work as a get-out-of-jail card
+	isTheoretical := strings.Contains(adj, "theoretical") || strings.Contains(adj, "theory")
+	isMeta := IsMetaphorical(adj) && !isTheoretical
+
 	switch law.RuleType {
 	case "no_living":
 		if cargo.HasTrait("living") {
-			if matchAnyKeyword(adj, NonLivingAdjectives) {
+			if isTheoretical {
+				return false // theoretical doesn't work!
+			}
+			if isMeta || matchAnyKeyword(adj, NonLivingAdjectives) {
 				return true
 			}
 			return false // Busted!
@@ -174,14 +213,21 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		return true
 
 	case "pocket_only":
-		if matchAnyKeyword(cnt, PocketContainers) || matchAnyKeyword(adj, CompressingAdjectives) {
+		if isTheoretical {
+			// theoretical doesn't compress
+			return matchAnyKeyword(cnt, PocketContainers)
+		}
+		if isMeta || matchAnyKeyword(cnt, PocketContainers) || matchAnyKeyword(adj, CompressingAdjectives) {
 			return true // Slipped past!
 		}
 		return false // Busted!
 
 	case "no_wet":
 		if cargo.HasTrait("wet") {
-			if matchAnyKeyword(adj, DryAdjectives) || strings.Contains(cnt, "thermos") || strings.Contains(cnt, "vacuum") {
+			if isTheoretical {
+				return false // theoretical doesn't dry!
+			}
+			if isMeta || matchAnyKeyword(adj, DryAdjectives) || matchAnyKeyword(cnt, WaterproofContainers) {
 				return true
 			}
 			return false // Busted!
@@ -194,19 +240,24 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		}
 		return true
 
+	case "ban_all_metaphors":
+		// When player burned their metaphorical card, ALL metaphorical/imaginary synonyms are banned!
+		if isMeta || strings.Contains(adj, "metaphor") || strings.Contains(adj, "imaginar") {
+			return false // Busted! Metaphorical joker already spent!
+		}
+		return true
+
 	case "banned_adjective":
-		// Evaluates "NOTHING [ADJECTIVE]"
 		target := strings.ToLower(strings.TrimSpace(law.TargetAdj))
 		if target != "" && (strings.Contains(adj, target) || strings.Contains(target, adj)) {
-			return false // Busted! Used yesterday's loophole adjective
+			return false // Busted! Used previous day's loophole adjective
 		}
 		return true
 
 	case "banned_container":
-		// Evaluates "NOTHING IN [CONTAINER]"
 		target := strings.ToLower(strings.TrimSpace(law.TargetCargo))
 		if target != "" && (strings.Contains(cnt, target) || strings.Contains(target, cnt)) {
-			return false // Busted! Used yesterday's loophole container
+			return false // Busted! Used previous day's loophole container
 		}
 		return true
 
@@ -255,28 +306,38 @@ func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 }
 
 // CompileLoopholeRules creates TWO brand-new rules from the winning disguise:
-// Rule 1: NOTHING [ADJECTIVE] (e.g. NOTHING METAPHORICAL)
-// Rule 2: NOTHING IN [CONTAINER] (e.g. NOTHING IN AN ENVELOPE)
+// If metaphorical or its synonym was used, bans ALL metaphors for the rest of the run!
 func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
 	adj := strings.TrimSpace(d.Adjective)
 	cnt := strings.TrimSpace(d.Container)
 
-	adjSignpost := fmt.Sprintf("NOTHING %s", strings.ToUpper(adj))
-	cntSignpost := formatContainerSignpost(cnt)
-
-	law1 := Law{
-		ID:        int64(existingCount + 1),
-		Day:       nextDay,
-		Signpost:  adjSignpost,
-		RuleType:  "banned_adjective",
-		TargetAdj: strings.ToLower(adj),
-		CreatedAt: time.Now(),
+	var law1 Law
+	if IsMetaphorical(adj) {
+		// Used the get-out-of-jail free card -> Ban ALL metaphors & imaginary concepts!
+		law1 = Law{
+			ID:        int64(existingCount + 1),
+			Day:       nextDay,
+			Signpost:  "NO METAPHORS OR IMAGINARY CONCEPTS",
+			RuleType:  "ban_all_metaphors",
+			TargetAdj: "metaphorical",
+			CreatedAt: time.Now(),
+		}
+	} else {
+		// Specific adjective ban
+		law1 = Law{
+			ID:        int64(existingCount + 1),
+			Day:       nextDay,
+			Signpost:  fmt.Sprintf("NOTHING %s", strings.ToUpper(adj)),
+			RuleType:  "banned_adjective",
+			TargetAdj: strings.ToLower(adj),
+			CreatedAt: time.Now(),
+		}
 	}
 
 	law2 := Law{
 		ID:          int64(existingCount + 2),
 		Day:         nextDay,
-		Signpost:    cntSignpost,
+		Signpost:    formatContainerSignpost(cnt),
 		RuleType:    "banned_container",
 		TargetCargo: strings.ToLower(cnt),
 		CreatedAt:   time.Now(),
