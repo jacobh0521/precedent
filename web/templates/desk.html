@@ -1,10 +1,30 @@
 {{define "desk"}}
 <div class="max-w-3xl mx-auto px-4 py-8 space-y-8">
 
+    <!-- Day 8 / Cycle Regime Shift Stamp Banner -->
+    {{if .IsRegimeShift}}
+    <div class="rounded-xl border-2 border-amber-500 bg-amber-950/70 p-4 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+        <div class="flex items-center space-x-3">
+            <span class="text-3xl">🚨</span>
+            <div>
+                <span class="font-mono text-sm sm:text-base font-black tracking-widest text-amber-300 uppercase block">
+                    REGIME SHIFT // CODEX OVERHAULED &amp; PRECEDENT LAWS PURGED
+                </span>
+                <span class="font-mono text-xs text-stone-300">
+                    Welcome to {{.RegimeName}}. All past precedent laws have been expunged by orbital decree.
+                </span>
+            </div>
+        </div>
+        <div class="px-4 py-1.5 rounded bg-amber-500 text-stone-950 font-mono font-black text-xs uppercase tracking-wider whitespace-nowrap">
+            NEW CODEX ACTIVE
+        </div>
+    </div>
+    {{end}}
+
     <!-- Big Centered Daily Contraband -->
     <div class="text-center space-y-2 py-4">
         <span class="text-xs font-mono tracking-widest uppercase text-amber-500 font-bold block">
-            DAY {{.CurrentDay}} CONTRABAND TO SMUGGLE
+            DAY {{.CurrentDay}} CONTRABAND TO SMUGGLE (REGIME {{.RegimeNumber}})
         </span>
         <h1 class="text-4xl sm:text-5xl font-black font-mono tracking-tight text-manila-100 uppercase">
             {{.TodayManifest.Name}}
@@ -46,17 +66,17 @@
         <div id="rule-board" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {{range .ActiveLaws}}
             <div class="rule-light-neutral border rounded-lg p-3 text-center transition-all duration-300 flex flex-col justify-center items-center h-20 shadow-sm
-                {{if gt .Day 1}} border-amber-500/80 bg-amber-950/20 {{end}}">
+                {{if gt .Day $.CycleStartDay}} border-amber-500/80 bg-amber-950/20 {{end}}">
                 <span class="font-mono font-black text-sm tracking-wide uppercase leading-tight">
                     {{.Signpost}}
                 </span>
-                {{if gt .Day 1}}
+                {{if gt .Day $.CycleStartDay}}
                 <span class="text-[10px] font-mono text-amber-400 font-bold mt-1 uppercase tracking-widest">
                     ⚡ PRECEDENT LAW (DAY {{.Day}})
                 </span>
                 {{else}}
                 <span class="text-[10px] font-mono text-stone-400 font-semibold mt-1">
-                    PERMANENT CODEX
+                    PERMANENT CODEX (REGIME {{$.RegimeNumber}})
                 </span>
                 {{end}}
             </div>
@@ -77,7 +97,7 @@
                     <input type="text" 
                            id="adjective-input" 
                            name="adjective" 
-                           placeholder="e.g. Inflatable, Metaphorical, Folded..." 
+                           placeholder="e.g. Taxidermied, Origami, Dehydrated, Robotic..." 
                            autocomplete="off"
                            required
                            oninput="updateStampButton()"
@@ -92,7 +112,7 @@
                     <input type="text" 
                            id="container-input" 
                            name="container" 
-                           placeholder="e.g. Envelope, Pocket, Matchbox..." 
+                           placeholder="e.g. Tin Can, Briefcase, Pencil Case, Lunchbox, Lockbox..." 
                            autocomplete="off"
                            required
                            oninput="updateStampButton()"

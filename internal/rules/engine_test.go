@@ -74,15 +74,14 @@ func TestMetaphoricalSynonymBlanketBan(t *testing.T) {
 	if len(newLaws) != 2 {
 		t.Fatalf("expected 2 new laws, got %d", len(newLaws))
 	}
-	// Verify that law 1 is the blanket ban on ALL metaphors
 	if newLaws[0].Signpost != "NO METAPHORS OR IMAGINARY CONCEPTS" {
 		t.Fatalf("expected 'NO METAPHORS OR IMAGINARY CONCEPTS', got '%s'", newLaws[0].Signpost)
 	}
 	if newLaws[0].RuleType != "ban_all_metaphors" {
 		t.Fatalf("expected rule_type 'ban_all_metaphors', got '%s'", newLaws[0].RuleType)
 	}
-	if newLaws[1].Signpost != "NOTHING IN AN ENVELOPE" {
-		t.Fatalf("expected 'NOTHING IN AN ENVELOPE', got '%s'", newLaws[1].Signpost)
+	if newLaws[1].Signpost != "NO PAPER OR ENVELOPE CONTAINERS" {
+		t.Fatalf("expected 'NO PAPER OR ENVELOPE CONTAINERS', got '%s'", newLaws[1].Signpost)
 	}
 
 	day2Lawbook := append(starterLaws, newLaws...)
@@ -109,6 +108,107 @@ func TestMetaphoricalSynonymBlanketBan(t *testing.T) {
 	vConcrete := Evaluate(day2Lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Pocket"}, 2)
 	if !vConcrete.Passed {
 		t.Fatalf("expected Inflatable in Pocket to clear Day 2: %+v", vConcrete.Audits)
+	}
+}
+
+func TestCreativeMutatedLoopholeRules(t *testing.T) {
+	starterLaws := StarterLaws()
+
+	// Player clears with "Microscopic" in "Envelope"
+	winDisguise := Disguise{
+		Adjective: "Microscopic",
+		Container: "Envelope",
+	}
+	compiled := CompileLoopholeRules(2, winDisguise, len(starterLaws))
+	if len(compiled) != 2 {
+		t.Fatalf("expected 2 rules, got %d", len(compiled))
+	}
+
+	// Law 1: Category ban on shrinking/scaling
+	if compiled[0].Signpost != "NO SHRINKING OR SCALING ADJECTIVES" {
+		t.Errorf("expected 'NO SHRINKING OR SCALING ADJECTIVES', got '%s'", compiled[0].Signpost)
+	}
+	// Law 2: Category ban on paper/envelopes
+	if compiled[1].Signpost != "NO PAPER OR ENVELOPE CONTAINERS" {
+		t.Errorf("expected 'NO PAPER OR ENVELOPE CONTAINERS', got '%s'", compiled[1].Signpost)
+	}
+
+	lawbook := append(starterLaws, compiled...)
+	giraffe := Cargo{
+		ID:     "cargo-1",
+		Name:   "A LIVE GIRAFFE",
+		Traits: []string{"living", "oversized"},
+	}
+
+	// Trying "Miniature" in "Folder" should be BUSTED by both category bans!
+	vAttempt := Evaluate(lawbook, giraffe, Disguise{Adjective: "Miniature", Container: "Folder"}, 1)
+	if vAttempt.Passed {
+		t.Fatalf("expected Miniature in Folder to be busted by mutated category bans!")
+	}
+
+	// But switching strategy to "Inflatable" in "Velvet Pouch" succeeds!
+	vCreative := Evaluate(lawbook, giraffe, Disguise{Adjective: "Inflatable", Container: "Velvet Pouch"}, 1)
+	if !vCreative.Passed {
+		t.Fatalf("expected Inflatable in Velvet Pouch to pass: %+v", vCreative.Audits)
+	}
+}
+
+func TestCreativeContainersAndAdjectives(t *testing.T) {
+	starterLaws := StarterLaws()
+
+	giraffe := Cargo{
+		ID:     "cargo-1",
+		Name:   "A LIVE GIRAFFE",
+		Traits: []string{"living", "oversized"},
+	}
+
+	creativeCases := []Disguise{
+		{Adjective: "Taxidermied", Container: "Pencil Case"},
+		{Adjective: "Origami", Container: "Box of Cards"},
+		{Adjective: "Taxidermied", Container: "Journal"},
+		{Adjective: "Inflatable", Container: "Lunchbox"},
+	}
+
+	for _, d := range creativeCases {
+		v := Evaluate(starterLaws, giraffe, d, 1)
+		if !v.Passed {
+			t.Errorf("expected creative disguise (%s, %s) to pass, but failed: %+v", d.Adjective, d.Container, v.Audits)
+		}
+	}
+}
+
+func TestRegimeShiftDay8(t *testing.T) {
+	regime8 := GetRegimeForDay(8)
+	if regime8.Number != 2 {
+		t.Fatalf("expected Regime 2 on Day 8, got %d", regime8.Number)
+	}
+	if len(regime8.Codex) != 5 {
+		t.Fatalf("expected 5 starter codex laws in Regime 2, got %d", len(regime8.Codex))
+	}
+	if !IsCycleStartDay(8) {
+		t.Fatalf("expected IsCycleStartDay(8) to be true")
+	}
+	if IsCycleStartDay(7) {
+		t.Fatalf("expected IsCycleStartDay(7) to be false")
+	}
+
+	// Test Existential Dread under Regime 2
+	dread := Cargo{
+		ID:     "cargo-day-8",
+		Name:   "EXISTENTIAL DREAD",
+		Traits: []string{"sentient", "cursed", "oversized"},
+	}
+
+	// Fails with soft pocket / sentient form
+	vFail := Evaluate(regime8.Codex, dread, Disguise{Adjective: "Unmodified", Container: "Pocket"}, 1)
+	if vFail.Passed {
+		t.Fatalf("expected Existential Dread with Unmodified in Pocket to fail Regime 2!")
+	}
+
+	// Passes with Taxidermied / Pacified in Rigid Lockbox / Tin Can
+	vPass := Evaluate(regime8.Codex, dread, Disguise{Adjective: "Taxidermied", Container: "Tin Can"}, 1)
+	if !vPass.Passed {
+		t.Fatalf("expected Taxidermied in Tin Can to pass Regime 2: %+v", vPass.Audits)
 	}
 }
 

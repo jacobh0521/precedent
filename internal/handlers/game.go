@@ -20,12 +20,17 @@ type GameHandler struct {
 
 // DeskViewData holds data for the main play view.
 type DeskViewData struct {
-	CurrentDay    int
-	AttemptCount  int
-	MaxAttempts   int
-	TodayManifest db.Manifest
-	ActiveLaws    []rules.Law
-	WeeklyDebrief db.WeeklyDebrief
+	CurrentDay        int
+	AttemptCount      int
+	MaxAttempts       int
+	TodayManifest     db.Manifest
+	ActiveLaws        []rules.Law
+	WeeklyDebrief     db.WeeklyDebrief
+	IsRegimeShift     bool
+	RegimeShiftBanner string
+	RegimeName        string
+	RegimeNumber      int
+	CycleStartDay     int
 }
 
 // VerdictPartialData holds data passed to verdict.html.
@@ -38,6 +43,9 @@ type VerdictPartialData struct {
 	CurrentDay       int
 	OutOfTries       bool
 	DailyShareText   string
+	IsRegimeShift    bool
+	RegimeNumber     int
+	RegimeName       string
 }
 
 // NewGameHandler initializes handler with template parsing.
@@ -87,13 +95,22 @@ func (h *GameHandler) HandleDeskView(w http.ResponseWriter, r *http.Request) {
 	activeLaws, _ := h.store.GetActiveLaws()
 	weeklyDebrief, _ := h.store.GetWeeklyDebrief()
 
+	regime := rules.GetRegimeForDay(currentDay)
+	isRegimeShift := rules.IsCycleStartDay(currentDay)
+	cycleStartDay := ((currentDay - 1) / 7) * 7 + 1
+
 	data := DeskViewData{
-		CurrentDay:    currentDay,
-		AttemptCount:  attemptCount,
-		MaxAttempts:   3, // 3 attempts per day
-		TodayManifest: todayManifest,
-		ActiveLaws:    activeLaws,
-		WeeklyDebrief: weeklyDebrief,
+		CurrentDay:        currentDay,
+		AttemptCount:      attemptCount,
+		MaxAttempts:       3, // 3 attempts per day
+		TodayManifest:     todayManifest,
+		ActiveLaws:        activeLaws,
+		WeeklyDebrief:     weeklyDebrief,
+		IsRegimeShift:     isRegimeShift,
+		RegimeShiftBanner: "REGIME SHIFT // CODEX OVERHAULED & PRECEDENT LAWS PURGED",
+		RegimeName:        regime.Name,
+		RegimeNumber:      regime.Number,
+		CycleStartDay:     cycleStartDay,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -152,6 +169,7 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	records, _ := h.store.GetDeclarationsForDay(currentDay)
 	shareText := formatDailyShare(currentDay, manifest.Name, verdict.Passed, attemptCount, records, verdict.CompiledLaws)
 	sentence := rules.FormatDisguiseSentence(disguise.Adjective, manifest.Name, disguise.Container)
+	regime := rules.GetRegimeForDay(currentDay)
 
 	partialData := VerdictPartialData{
 		Verdict:          verdict,
@@ -162,6 +180,9 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 		CurrentDay:       currentDay,
 		OutOfTries:       outOfTries,
 		DailyShareText:   shareText,
+		IsRegimeShift:    rules.IsCycleStartDay(currentDay),
+		RegimeNumber:     regime.Number,
+		RegimeName:       regime.Name,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

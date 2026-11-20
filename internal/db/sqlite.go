@@ -89,6 +89,11 @@ func NewStore(filepath string) (*Store, error) {
 		return nil, fmt.Errorf("seeding failed: %w", err)
 	}
 
+	if err := s.EnsureRegimeConsistency(); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("regime consistency check failed: %w", err)
+	}
+
 	return s, nil
 }
 
@@ -387,7 +392,41 @@ func (s *Store) GetWeeklyDebrief() (WeeklyDebrief, error) {
 	}, nil
 }
 
-// AdvanceToNextDay increments day and resets attempts to 1.
+// EnsureRegimeConsistency ensures the active laws strictly match the current day's regime,
+// purging all past precedent laws whenever a new 7-day regime cycle begins.
+func (s *Store) EnsureRegimeConsistency() error {
+	day, err := s.GetCurrentDay()
+	if err != nil {
+		return err
+	}
+	regime := rules.GetRegimeForDay(day)
+	cycleStartDay := ((day - 1) / 7) * 7 + 1
+
+	// If we are on Day 8+ (or any cycle > 1), purge any lingering precedent laws from earlier cycles
+	if day > 1 && cycleStartDay > 1 {
+		var oldCount int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM laws WHERE is_active = 1 AND day < ?`, cycleStartDay).Scan(&oldCount)
+		if oldCount > 0 {
+			_, _ = s.db.Exec(`UPDATE laws SET is_active = 0 WHERE is_active = 1 AND day < ?`, cycleStartDay)
+		}
+
+		// Ensure current regime's 5 starter codex laws exist for this cycle
+		var codexCount int
+		_ = s.db.QueryRow(`SELECT COUNT(*) FROM laws WHERE is_active = 1 AND day >= ?`, cycleStartDay).Scan(&codexCount)
+		if codexCount == 0 {
+			for _, law := range regime.Codex {
+				_, _ = s.db.Exec(
+					`INSERT INTO laws (day, signpost, rule_type, target_adj, target_cargo, is_active, created_at)
+					 VALUES (?, ?, ?, '', '', 1, ?)`,
+					cycleStartDay, law.Signpost, law.RuleType, time.Now(),
+				)
+			}
+		}
+	}
+	return nil
+}
+
+// AdvanceToNextDay increments day, resets attempts to 1, and triggers Regime Shift on Day 8/15/22...
 func (s *Store) AdvanceToNextDay() (int, error) {
 	currentDay, err := s.GetCurrentDay()
 	if err != nil {
@@ -400,6 +439,27 @@ func (s *Store) AdvanceToNextDay() (int, error) {
 		return currentDay, err
 	}
 
+	// Day 8 (and every 7-day cycle) Regime Shift:
+	// Purge all precedent laws and install 5 fresh starter codex laws for the new regime!
+	if rules.IsCycleStartDay(nextDay) {
+		_, err = s.db.Exec(`UPDATE laws SET is_active = 0 WHERE is_active = 1`)
+		if err != nil {
+			return nextDay, err
+		}
+
+		regime := rules.GetRegimeForDay(nextDay)
+		for _, law := range regime.Codex {
+			_, err = s.db.Exec(
+				`INSERT INTO laws (day, signpost, rule_type, target_adj, target_cargo, is_active, created_at)
+				 VALUES (?, ?, ?, '', '', 1, ?)`,
+				nextDay, law.Signpost, law.RuleType, time.Now(),
+			)
+			if err != nil {
+				return nextDay, err
+			}
+		}
+	}
+
 	return nextDay, nil
 }
 
@@ -409,10 +469,27 @@ func (s *Store) ResetToDay1() error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`DELETE FROM laws WHERE day > 1`)
+	_, err = s.db.Exec(`DELETE FROM laws`)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.Exec(`DELETE FROM declarations`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Re-seed Day 1 starter laws
+	starterLaws := rules.StarterLaws()
+	for _, law := range starterLaws {
+		_, err = s.db.Exec(
+			`INSERT INTO laws (day, signpost, rule_type, target_adj, target_cargo, is_active, created_at)
+			 VALUES (?, ?, ?, '', '', 1, ?)`,
+			1, law.Signpost, law.RuleType, time.Now(),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
