@@ -44,10 +44,10 @@
                 ACTIVE CHECKPOINT LAWS ({{len .ActiveLaws}})
             </span>
             
-            <!-- 3 Attempts Daily Limit Indicator -->
+            <!-- Max Attempts Daily Limit Indicator -->
             <div class="flex items-center space-x-1.5 font-mono text-xs">
                 <span class="text-stone-400 mr-2 font-bold">DAILY ATTEMPTS:</span>
-                {{range $i := seq 3}}
+                {{range $i := seq $.MaxAttempts}}
                 <span class="w-4 h-4 rounded-full border transition flex items-center justify-center text-[10px] font-bold
                     {{if lt $i $.AttemptCount}}
                         bg-rose-500 border-rose-400 text-stone-950
@@ -58,7 +58,7 @@
                     {{end}}">
                 </span>
                 {{end}}
-                <span class="text-stone-400 ml-1.5 font-bold">({{.AttemptCount}}/3)</span>
+                <span class="text-stone-400 ml-1.5 font-bold">({{.AttemptCount}}/{{.MaxAttempts}})</span>
             </div>
         </div>
 
@@ -147,7 +147,10 @@
         const cnt = document.getElementById('container-input').value.trim();
         const stampText = document.getElementById('stamp-button-text');
         const rawCargo = "{{.TodayManifest.Name}}";
-        const cleanCargo = rawCargo.replace(/^(A |AN |THE )/i, "");
+        let cleanCargo = rawCargo.replace(/^(A |AN |THE )/i, "");
+        if (adj && !/^unmodified$/i.test(adj)) {
+            cleanCargo = cleanCargo.replace(/^LIVE /i, "");
+        }
 
         if (adj && cnt) {
             let article = /^[aeiou]/i.test(cnt) ? "AN" : "A";

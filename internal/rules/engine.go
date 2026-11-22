@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// MaxDailyAttempts is the single authoritative constant for user attempts per day.
+const MaxDailyAttempts = 3
+
 // Cargo represents the contraband item.
 type Cargo struct {
 	ID     string   `json:"id"`
@@ -95,6 +98,7 @@ var (
 		"freeze-dried", "statue", "dummy", "mannequin", "puppet", "carved",
 		"sculpted", "wax", "clay", "inert", "dormant", "petrified", "mummified",
 		"cybernetic", "automated", "electronic", "deactivated", "sedated",
+		"cremated", "ash", "ashes",
 	}
 
 	GlassKeywords = []string{
@@ -119,7 +123,7 @@ var (
 		"shrunken", "compressed", "flattened", "pocket-sized", "nano", "subatomic",
 		"compact", "deflated", "origami", "dehydrated", "crushed", "condensed",
 		"paper", "freeze-dried", "mini", "pocket", "micro", "flat", "concentrated",
-		"minified", "reduced",
+		"minified", "reduced", "cremated", "ash", "powdered",
 	}
 
 	DryAdjectives = []string{
@@ -128,7 +132,7 @@ var (
 		"crystallized", "solidified", "digital", "taxidermied", "wooden",
 		"plastic", "paper", "desiccated", "inflatable", "ceramic", "plush",
 		"stuffed", "fossilized", "dry", "solid", "petrified", "congealed",
-		"jellied", "calcified",
+		"jellied", "calcified", "cremated", "ash", "ashes",
 	}
 
 	WaterproofContainers = []string{
@@ -182,11 +186,26 @@ var (
 		"plush", "toy", "taxidermied", "stuffed", "tame", "domesticated",
 		"sleeping", "sedated", "hibernating", "docile", "inflatable", "wooden",
 		"plastic", "origami", "replica", "inert", "pacified", "gentle",
-		"trained", "fake", "ceramic", "statue", "calm", "dead",
+		"trained", "fake", "ceramic", "statue", "calm", "dead", "cremated",
 	}
 
 	ShieldingAdjectives = []string{
 		"lead", "shielded", "inert", "heavy", "dense", "insulated", "grounded",
+	}
+
+	// Solvability test pools
+	SolvabilityAdjectivePool = []string{
+		"Metaphorical", "Inflatable", "Folded", "Origami", "Dehydrated",
+		"Frozen", "Microscopic", "Miniature", "Taxidermied", "Robotic",
+		"Digital", "Cremated", "Plush", "Ceramic", "Lead", "Sedated",
+		"Unmodified",
+	}
+
+	SolvabilityContainerPool = []string{
+		"Pocket", "Envelope", "Matchbox", "Velvet Pouch", "Cardboard Box",
+		"Lead Crate", "Glass Jar", "Ziploc Bag", "Plastic Bag", "Thermos",
+		"Tin Can", "Briefcase", "Pencil Case", "Lunchbox", "Lockbox",
+		"Wooden Chest", "Bare Hands",
 	}
 )
 
@@ -213,6 +232,128 @@ func matchAnyKeyword(text string, keywords []string) bool {
 	return false
 }
 
+// ResolveCargoTraits calculates effective traits of the cargo after the adjective is applied,
+// ensuring every adjective explicitly removes conflicting base traits.
+func ResolveCargoTraits(cargo Cargo, adj string) map[string]bool {
+	traits := make(map[string]bool)
+	for _, tr := range cargo.Traits {
+		traits[strings.ToLower(strings.TrimSpace(tr))] = true
+	}
+
+	adjLower := strings.ToLower(strings.TrimSpace(adj))
+	isTheoretical := strings.Contains(adjLower, "theoretical") || strings.Contains(adjLower, "theory")
+	if isTheoretical {
+		// "theoretical" explicitly DOES NOT remove physical traits!
+		return traits
+	}
+
+	if IsMetaphorical(adjLower) {
+		// Metaphorical eliminates all physical constraints!
+		for k := range traits {
+			traits[k] = false
+		}
+		traits["metaphorical"] = true
+		traits["abstract"] = true
+		return traits
+	}
+
+	// 1. Cremated / Ash / Vaporized / Incinerated
+	if matchAnyKeyword(adjLower, []string{"cremated", "ash", "ashes", "incinerated", "vaporized", "reduced to ash"}) {
+		traits["living"] = false
+		traits["wet"] = false
+		traits["liquid"] = false
+		traits["gas"] = false
+		traits["oversized"] = false
+		traits["large"] = false
+		traits["tall"] = false
+		traits["sentient"] = false
+		traits["cursed"] = false
+		traits["flammable"] = false
+		traits["predator"] = false
+		traits["aggressive"] = false
+		traits["dry"] = true
+		traits["ash"] = true
+		traits["dead"] = true
+	}
+
+	// 2. Dehydrated / Dried / Freeze-Dried / Desiccated / Powdered
+	if matchAnyKeyword(adjLower, DryAdjectives) {
+		traits["wet"] = false
+		traits["liquid"] = false
+		traits["dry"] = true
+		if matchAnyKeyword(adjLower, []string{"powdered", "powder", "freeze-dried"}) {
+			traits["oversized"] = false
+			traits["large"] = false
+			traits["tall"] = false
+		}
+	}
+
+	// 3. Frozen / Solidified / Crystallized
+	if matchAnyKeyword(adjLower, []string{"frozen", "solidified", "crystallized", "solid", "ice"}) {
+		traits["liquid"] = false
+		traits["wet"] = false
+		traits["gas"] = false
+		traits["solid"] = true
+		traits["dry"] = true
+	}
+
+	// 4. Inflatable / Deflated / Balloon
+	if matchAnyKeyword(adjLower, []string{"inflatable", "deflated", "balloon"}) {
+		traits["living"] = false
+		traits["sentient"] = false
+		traits["predator"] = false
+		traits["aggressive"] = false
+		traits["toy"] = true
+		traits["fake"] = true
+		traits["decoy"] = true
+		// Deflated / foldable inflatable removes oversized constraint
+		traits["oversized"] = false
+		traits["large"] = false
+		traits["tall"] = false
+	}
+
+	// 5. Compressing / Shrinking / Folding / Miniature
+	if matchAnyKeyword(adjLower, CompressingAdjectives) {
+		traits["oversized"] = false
+		traits["large"] = false
+		traits["tall"] = false
+		traits["tiny"] = true
+		traits["compressed"] = true
+		if matchAnyKeyword(adjLower, []string{"origami", "paper"}) {
+			traits["living"] = false
+			traits["sentient"] = false
+			traits["predator"] = false
+		}
+	}
+
+	// 6. Toy / Decoy / Fake / Replica / Taxidermied / Robotic / Mechanical / Digital
+	if matchAnyKeyword(adjLower, NonLivingAdjectives) {
+		traits["living"] = false
+		traits["sentient"] = false
+		traits["cursed"] = false
+		traits["predator"] = false
+		traits["aggressive"] = false
+		traits["fake"] = true
+		traits["inert"] = true
+	}
+
+	// 7. Pacifying / Domesticated / Sedated / Sleeping
+	if matchAnyKeyword(adjLower, PacifyingAdjectives) {
+		traits["predator"] = false
+		traits["aggressive"] = false
+		traits["pacified"] = true
+	}
+
+	// 8. Lead / Shielded / Insulated
+	if matchAnyKeyword(adjLower, ShieldingAdjectives) {
+		traits["radiation"] = false
+		traits["ionized"] = false
+		traits["shielded"] = true
+	}
+
+	return traits
+}
+
 // EvaluateRule evaluates a single law against the cargo and player's disguise.
 func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 	adj := strings.ToLower(strings.TrimSpace(d.Adjective))
@@ -222,15 +363,11 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 	isTheoretical := strings.Contains(adj, "theoretical") || strings.Contains(adj, "theory")
 	isMeta := IsMetaphorical(adj) && !isTheoretical
 
+	effectiveTraits := ResolveCargoTraits(cargo, adj)
+
 	switch law.RuleType {
 	case "no_living":
-		if cargo.HasTrait("living") {
-			if isTheoretical {
-				return false
-			}
-			if isMeta || matchAnyKeyword(adj, NonLivingAdjectives) {
-				return true
-			}
+		if effectiveTraits["living"] {
 			return false
 		}
 		return true
@@ -243,19 +380,24 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 
 	case "pocket_only":
 		if isTheoretical {
-			return matchAnyKeyword(cnt, PocketContainers)
+			return false // theoretical doesn't shrink or fit
 		}
-		if isMeta || matchAnyKeyword(cnt, PocketContainers) || matchAnyKeyword(adj, CompressingAdjectives) {
-			return true
+		if isMeta {
+			return true // metaphorical fits anywhere
 		}
-		return false
+		// Container must be pocket-sized:
+		if !matchAnyKeyword(cnt, PocketContainers) {
+			return false
+		}
+		// Cargo must NOT still have oversized/large/tall trait:
+		if effectiveTraits["oversized"] || effectiveTraits["large"] || effectiveTraits["tall"] {
+			return false
+		}
+		return true
 
 	case "no_wet":
-		if cargo.HasTrait("wet") {
-			if isTheoretical {
-				return false
-			}
-			if isMeta || matchAnyKeyword(adj, DryAdjectives) || matchAnyKeyword(cnt, WaterproofContainers) {
+		if effectiveTraits["wet"] || effectiveTraits["liquid"] {
+			if matchAnyKeyword(cnt, WaterproofContainers) {
 				return true
 			}
 			return false
@@ -270,11 +412,8 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 
 	// Regime 2 Rules
 	case "no_liquid_gas":
-		if cargo.HasTrait("liquid") || cargo.HasTrait("gas") || cargo.HasTrait("wet") {
-			if isTheoretical {
-				return false
-			}
-			if isMeta || matchAnyKeyword(adj, DryAdjectives) || matchAnyKeyword(cnt, WaterproofContainers) {
+		if effectiveTraits["liquid"] || effectiveTraits["gas"] || effectiveTraits["wet"] {
+			if matchAnyKeyword(cnt, WaterproofContainers) {
 				return true
 			}
 			return false
@@ -282,13 +421,7 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		return true
 
 	case "no_sentient_cursed":
-		if cargo.HasTrait("sentient") || cargo.HasTrait("cursed") || cargo.HasTrait("living") {
-			if isTheoretical {
-				return false
-			}
-			if isMeta || matchAnyKeyword(adj, NonLivingAdjectives) || matchAnyKeyword(adj, PacifyingAdjectives) {
-				return true
-			}
+		if effectiveTraits["sentient"] || effectiveTraits["cursed"] || effectiveTraits["living"] {
 			return false
 		}
 		return true
@@ -304,7 +437,7 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		return true
 
 	case "no_flammable":
-		if cargo.HasTrait("flammable") || matchAnyKeyword(cnt, FlammableMaterials) || matchAnyKeyword(adj, []string{"burning", "flaming", "fire", "combustible", "flammable"}) {
+		if effectiveTraits["flammable"] || matchAnyKeyword(cnt, FlammableMaterials) || matchAnyKeyword(adj, []string{"burning", "flaming", "fire", "combustible", "flammable"}) {
 			if isMeta {
 				return true
 			}
@@ -326,17 +459,14 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		return false
 
 	case "no_predators":
-		if cargo.HasTrait("predator") || cargo.HasTrait("aggressive") {
-			if isMeta || matchAnyKeyword(adj, PacifyingAdjectives) {
-				return true
-			}
+		if effectiveTraits["predator"] || effectiveTraits["aggressive"] {
 			return false
 		}
 		return true
 
 	case "no_radiation":
-		if cargo.HasTrait("radiation") || cargo.HasTrait("ionized") || cargo.HasTrait("cosmic") {
-			if isMeta || matchAnyKeyword(adj, ShieldingAdjectives) || matchAnyKeyword(cnt, []string{"lead", "lead crate", "shielded"}) {
+		if effectiveTraits["radiation"] || effectiveTraits["ionized"] || effectiveTraits["cosmic"] {
+			if matchAnyKeyword(cnt, []string{"lead", "lead crate", "shielded"}) {
 				return true
 			}
 			return false
@@ -344,7 +474,7 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 		return true
 
 	case "must_use_container":
-		if cnt == "" || strings.Contains(cnt, "bare hands") || strings.Contains(cnt, "uncontained") || strings.Contains(cnt, "none") {
+		if cnt == "" || matchAnyKeyword(cnt, []string{"bare hands", "hands", "none", "uncontained"}) {
 			return false
 		}
 		return true
@@ -429,7 +559,7 @@ func EvaluateRule(law Law, cargo Cargo, d Disguise) bool {
 	}
 }
 
-// Evaluate evaluates all active laws against cargo and disguise (Max 3 attempts).
+// Evaluate evaluates all active laws against cargo and disguise (MaxDailyAttempts limit).
 func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 	allPassed := true
 	audits := make([]RuleAudit, 0, len(laws))
@@ -463,14 +593,28 @@ func Evaluate(laws []Law, cargo Cargo, d Disguise, attempt int) AuditVerdict {
 		Status:      verdictStatus,
 		Audits:      audits,
 		Attempt:     attempt,
-		MaxAttempts: 3, // 3 attempts per user per day
+		MaxAttempts: MaxDailyAttempts, // Synced to constant
 		EmojiRow:    emojiBuilder.String(),
 	}
 }
 
-// CompileLoopholeRules creates TWO mutated, creative rules from the winning disguise.
-// Instead of merely banning the literal string, it categorizes the exploit or adds a systemic twist!
-func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
+// CheckSolvability verifies whether at least 1 winning disguise combo exists for the given cargo under the laws.
+func CheckSolvability(laws []Law, cargo Cargo) bool {
+	for _, adj := range SolvabilityAdjectivePool {
+		for _, cnt := range SolvabilityContainerPool {
+			v := Evaluate(laws, cargo, Disguise{Adjective: adj, Container: cnt}, 1)
+			if v.Passed {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// CompileLoopholeRules creates TWO mutated rules from the winning disguise.
+// Includes a solvability check against tomorrow's cargo to guarantee at least 1 winning combo remains!
+func CompileLoopholeRules(nextDay int, d Disguise, existingLaws []Law, tomorrowCargo ...Cargo) []Law {
+	existingCount := len(existingLaws)
 	adj := strings.TrimSpace(d.Adjective)
 	cnt := strings.TrimSpace(d.Container)
 	adjLower := strings.ToLower(adj)
@@ -478,7 +622,6 @@ func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
 
 	var law1 Law
 	if IsMetaphorical(adj) {
-		// Used get-out-of-jail free card -> permanently ban all metaphors and imaginary concepts!
 		law1 = Law{
 			ID:        int64(existingCount + 1),
 			Day:       nextDay,
@@ -590,7 +733,6 @@ func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
 			CreatedAt:   time.Now(),
 		}
 	} else if matchAnyKeyword(cntLower, RigidContainers) {
-		// Creative twist if player used a rigid container: customs mandates transparency!
 		law2 = Law{
 			ID:          int64(existingCount + 2),
 			Day:         nextDay,
@@ -610,10 +752,68 @@ func CompileLoopholeRules(nextDay int, d Disguise, existingCount int) []Law {
 		}
 	}
 
+	// Solvability check: If tomorrow's cargo is provided, ensure at least 1 winning combo remains!
+	if len(tomorrowCargo) > 0 && tomorrowCargo[0].ID != "" {
+		cargo := tomorrowCargo[0]
+		combined := append(append([]Law{}, existingLaws...), law1, law2)
+
+		// 1. Check if both proposed laws keep the game solvable
+		if CheckSolvability(combined, cargo) {
+			return []Law{law1, law2}
+		}
+
+		// 2. Fallback: Soften law1 to specific adjective ban
+		law1Soft := Law{
+			ID:        law1.ID,
+			Day:       nextDay,
+			Signpost:  fmt.Sprintf("NOTHING %s", strings.ToUpper(adj)),
+			RuleType:  "banned_adjective",
+			TargetAdj: adjLower,
+			CreatedAt: time.Now(),
+		}
+		if CheckSolvability(append(append([]Law{}, existingLaws...), law1Soft, law2), cargo) {
+			return []Law{law1Soft, law2}
+		}
+
+		// 3. Fallback: Also soften law2 to specific container ban
+		law2Soft := Law{
+			ID:          law2.ID,
+			Day:         nextDay,
+			Signpost:    formatContainerSignpost(cnt),
+			RuleType:    "banned_container",
+			TargetCargo: cntLower,
+			CreatedAt:   time.Now(),
+		}
+		if CheckSolvability(append(append([]Law{}, existingLaws...), law1Soft, law2Soft), cargo) {
+			return []Law{law1Soft, law2Soft}
+		}
+
+		// 4. Fallback: If still unsolvable, keep whichever single law preserves solvability
+		if CheckSolvability(append(append([]Law{}, existingLaws...), law1Soft), cargo) {
+			return []Law{law1Soft}
+		}
+		if CheckSolvability(append(append([]Law{}, existingLaws...), law2Soft), cargo) {
+			return []Law{law2Soft}
+		}
+	}
+
 	return []Law{law1, law2}
 }
 
+// toTitleWords converts a string to Title Case words.
+func toTitleWords(s string) string {
+	words := strings.Fields(s)
+	for i, w := range words {
+		lower := strings.ToLower(w)
+		if len(lower) > 0 {
+			words[i] = strings.ToUpper(lower[:1]) + lower[1:]
+		}
+	}
+	return strings.Join(words, " ")
+}
+
 // FormatDisguiseSentence builds a grammatically correct sentence describing the smuggling attempt.
+// Cleans up manifest display names so adjectives replace "LIVE" instead of printing "Cremated LIVE GIRAFFE".
 func FormatDisguiseSentence(adj, cargoName, container string) string {
 	cleanCargo := strings.TrimSpace(cargoName)
 	upper := strings.ToUpper(cleanCargo)
@@ -628,9 +828,15 @@ func FormatDisguiseSentence(adj, cargoName, container string) string {
 	cleanAdj := strings.TrimSpace(adj)
 	var subject string
 	if cleanAdj != "" && !strings.EqualFold(cleanAdj, "Unmodified") {
-		subject = fmt.Sprintf("%s %s", cleanAdj, cleanCargo)
+		// When modified by an adjective, replace "LIVE " in cargo display
+		// e.g. "Cremated Giraffe" instead of "Cremated LIVE GIRAFFE"
+		cargoWithoutLive := cleanCargo
+		if strings.HasPrefix(strings.ToUpper(cargoWithoutLive), "LIVE ") {
+			cargoWithoutLive = strings.TrimSpace(cargoWithoutLive[5:])
+		}
+		subject = fmt.Sprintf("%s %s", cleanAdj, toTitleWords(cargoWithoutLive))
 	} else {
-		subject = cleanCargo
+		subject = toTitleWords(cleanCargo)
 	}
 
 	cleanCnt := strings.TrimSpace(container)

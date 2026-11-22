@@ -102,7 +102,7 @@ func (h *GameHandler) HandleDeskView(w http.ResponseWriter, r *http.Request) {
 	data := DeskViewData{
 		CurrentDay:        currentDay,
 		AttemptCount:      attemptCount,
-		MaxAttempts:       3, // 3 attempts per day
+		MaxAttempts:       rules.MaxDailyAttempts, // Synced to constant
 		TodayManifest:     todayManifest,
 		ActiveLaws:        activeLaws,
 		WeeklyDebrief:     weeklyDebrief,
@@ -147,15 +147,16 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	cargo := manifest.ToCargo()
 	verdict := rules.Evaluate(activeLaws, cargo, disguise, attemptCount)
 
-	// If Cleared: Compile TWO new rules (Rule A: Banned Adjective, Rule B: Banned Container)
+	// If Cleared: Compile TWO new rules with solvability check for tomorrow's cargo
 	if verdict.Passed {
-		newLaws := rules.CompileLoopholeRules(currentDay+1, disguise, len(activeLaws))
+		tomorrowManifest := db.GetManifestForDay(currentDay + 1)
+		newLaws := rules.CompileLoopholeRules(currentDay+1, disguise, activeLaws, tomorrowManifest.ToCargo())
 		if err := h.store.SaveLaws(newLaws); err == nil {
 			verdict.CompiledLaws = newLaws
 		}
 	} else {
-		// Increment attempts (up to 3)
-		if attemptCount < 3 {
+		// Increment attempts (up to MaxDailyAttempts)
+		if attemptCount < rules.MaxDailyAttempts {
 			_, _ = h.store.IncrementAttempt()
 		}
 	}
@@ -163,7 +164,7 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 	_ = h.store.SaveDeclaration(manifest.ID, manifest.Name, currentDay, disguise, attemptCount, verdict)
 	updatedLaws, _ := h.store.GetActiveLaws()
 
-	outOfTries := (!verdict.Passed && attemptCount >= 3)
+	outOfTries := (!verdict.Passed && attemptCount >= rules.MaxDailyAttempts)
 
 	// Fetch all attempts today for this manifest to construct the Wordle-like share text
 	records, _ := h.store.GetDeclarationsForDay(currentDay)
@@ -195,9 +196,9 @@ func (h *GameHandler) HandleSubmitDisguise(w http.ResponseWriter, r *http.Reques
 }
 
 func formatDailyShare(day int, cargoName string, cleared bool, attempts int, records []db.DeclarationRecord, compiledLaws []rules.Law) string {
-	score := fmt.Sprintf("%d/3", attempts)
-	if !cleared && attempts >= 3 {
-		score = "X/3"
+	score := fmt.Sprintf("%d/%d", attempts, rules.MaxDailyAttempts)
+	if !cleared && attempts >= rules.MaxDailyAttempts {
+		score = fmt.Sprintf("X/%d", rules.MaxDailyAttempts)
 	}
 
 	var sb strings.Builder
@@ -206,7 +207,7 @@ func formatDailyShare(day int, cargoName string, cleared bool, attempts int, rec
 
 	for i, rec := range records {
 		guessSentence := rules.FormatDisguiseSentence(rec.Adjective, cargoName, rec.Container)
-		sb.WriteString(fmt.Sprintf("Guess %d/3: %s (%s)\n", i+1, rec.EmojiRow, guessSentence))
+		sb.WriteString(fmt.Sprintf("Guess %d/%d: %s (%s)\n", i+1, rules.MaxDailyAttempts, rec.EmojiRow, guessSentence))
 	}
 
 	if len(compiledLaws) > 0 {
@@ -216,7 +217,7 @@ func formatDailyShare(day int, cargoName string, cleared bool, attempts int, rec
 		}
 		sb.WriteString(fmt.Sprintf("\n⚖️ New Laws: %s\n", strings.Join(signposts, " | ")))
 	}
-	sb.WriteString("\nPlay Precedent: https://precedent-224653452177.us-central1.run.app")
+	sb.WriteString("\nPlay Precedent: https://precedent.cloud.run")
 	return sb.String()
 }
 
